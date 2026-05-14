@@ -7,6 +7,8 @@ import GameScreen from './pages/GameScreen.jsx'
 import Account from './pages/Account.jsx'
 import PublicGame from './pages/PublicGame.jsx'
 import GameLog from './pages/GameLog.jsx'
+import Imprint from './pages/Imprint.jsx'
+import Privacy from './pages/Privacy.jsx'
 import { DialogProvider } from './components/Dialogs.jsx'
 
 function Protected({ children }) {
@@ -31,6 +33,8 @@ export default function App() {
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/login" element={<Login />} />
+          <Route path="/imprint" element={<Imprint />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/p/:token" element={<PublicGame />} />
           <Route path="/" element={<Protected><GameList /></Protected>} />
           <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
 
@@ -27,7 +27,7 @@ export default function Login() {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="h-full bg-cream bg-dots relative overflow-hidden flex items-center justify-center px-4"
+      className="h-full bg-cream bg-dots relative overflow-hidden flex flex-col items-center justify-center px-4"
     >
       {/* floating shapes */}
       <Blobs />
@@ -36,7 +36,7 @@ export default function Login() {
         initial={{ y: 30, opacity: 0, rotate: -2 }}
         animate={{ y: 0, opacity: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 120, damping: 14 }}
-        className="card-chunk relative z-10 w-full max-w-md p-8"
+        className="card-chunk relative z-10 w-full max-w-md p-8 mb-6"
       >
         <div className="flex items-center gap-2 mb-6">
           <div className="w-10 h-10 rounded-2xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold text-xl">P!</div>
@@ -82,6 +82,15 @@ export default function Login() {
           </button>
         </form>
       </motion.div>
+
+      <motion.nav
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        className="relative z-10 flex items-center gap-4 text-sm font-semibold text-ink/70"
+      >
+        <Link to="/imprint" className="hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">Imprint</Link>
+        <span aria-hidden className="text-ink/30">·</span>
+        <Link to="/privacy" className="hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">Privacy</Link>
+      </motion.nav>
     </motion.div>
   )
 }
