@@ -5,9 +5,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import GameEditor from '../components/GameEditor.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
+import { useDialogs } from '../components/Dialogs.jsx'
 
 export default function GameList() {
   const { user, signOut } = useAuth()
+  const dialogs = useDialogs()
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
@@ -33,17 +35,39 @@ export default function GameList() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  const handleSignOut = async () => {
+    const ok = await dialogs.confirm({
+      title: 'Sign out?',
+      message: 'You can sign back in any time.',
+      confirmLabel: 'Sign out',
+      tone: 'neutral',
+    })
+    if (ok) await signOut()
+  }
+
   const remove = async (game) => {
-    if (!confirm(`Delete "${game.name}"? This cannot be undone.`)) return
+    const ok = await dialogs.confirm({
+      title: 'Delete game?',
+      message: `"${game.name}" and all its teams, scores, and logs will be permanently removed. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase.from('games').delete().eq('id', game.id)
-    if (error) alert(error.message)
+    if (error) await dialogs.alert({ title: 'Could not delete', message: error.message })
   }
 
   const leave = async (game) => {
-    if (!confirm(`Leave "${game.name}"?`)) return
+    const ok = await dialogs.confirm({
+      title: 'Leave game?',
+      message: `You'll lose access to "${game.name}". The owner can re-invite you later.`,
+      confirmLabel: 'Leave',
+      tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase.from('game_members').delete()
       .eq('game_id', game.id).eq('user_id', user.id)
-    if (error) alert(error.message)
+    if (error) await dialogs.alert({ title: 'Could not leave', message: error.message })
   }
 
   return (
@@ -61,7 +85,7 @@ export default function GameList() {
         </div>
         <div className="flex items-center gap-2">
           <NavLink to="/account" className="btn-chunk bg-white text-sm">Account</NavLink>
-          <button onClick={signOut} className="btn-chunk bg-white text-sm">Sign out</button>
+          <button onClick={handleSignOut} className="btn-chunk bg-white text-sm">Sign out</button>
         </div>
       </header>
 

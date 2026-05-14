@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#0F0F12" stroke-opacity="0.06" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#FFF8EC"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Pink stripe -->
+  <rect x="0" y="0" width="1200" height="90" fill="#FF4FA3"/>
+  <rect x="0" y="0" width="1200" height="90" fill="none" stroke="#0F0F12" stroke-width="4"/>
+
+  <!-- Logo badge -->
+  <g transform="translate(80,170)">
+    <rect width="140" height="140" rx="28" fill="#FFD93D" stroke="#0F0F12" stroke-width="6"/>
+    <text x="70" y="98" text-anchor="middle" font-family="Space Grotesk, Inter, sans-serif" font-weight="800" font-size="78" fill="#0F0F12">P!</text>
+  </g>
+  <text x="240" y="240" font-family="Space Grotesk, Inter, sans-serif" font-weight="700" font-size="44" fill="#0F0F12">Pointification</text>
+  <text x="240" y="290" font-family="Inter, sans-serif" font-weight="500" font-size="28" fill="#0F0F12" fill-opacity="0.6">Live scoreboards. Anywhere.</text>
+
+  <!-- Headline -->
+  <text x="80" y="430" font-family="Space Grotesk, Inter, sans-serif" font-weight="800" font-size="92" fill="#0F0F12">Track scores.</text>
+  <text x="80" y="520" font-family="Space Grotesk, Inter, sans-serif" font-weight="800" font-size="92" fill="#0F0F12">Share the link.</text>
+
+  <!-- Sample team pills -->
+  <g transform="translate(80,560)">
+    <g>
+      <rect width="180" height="50" rx="25" fill="#5EE2C1" stroke="#0F0F12" stroke-width="4"/>
+      <text x="90" y="33" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="22" fill="#0F0F12">Team A · 42</text>
+    </g>
+    <g transform="translate(200,0)">
+      <rect width="180" height="50" rx="25" fill="#4D7CFF" stroke="#0F0F12" stroke-width="4"/>
+      <text x="90" y="33" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="22" fill="#FFF8EC">Team B · 38</text>
+    </g>
+    <g transform="translate(400,0)">
+      <rect width="180" height="50" rx="25" fill="#FFD93D" stroke="#0F0F12" stroke-width="4"/>
+      <text x="90" y="33" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="22" fill="#0F0F12">Team C · 27</text>
+    </g>
+  </g>
+</svg>

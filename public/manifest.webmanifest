@@ -1,0 +1,12 @@
+{
+  "name": "Pointification",
+  "short_name": "Pointification",
+  "description": "Real-time scoreboards for quiz nights, classrooms, and game days.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF8EC",
+  "theme_color": "#FFF8EC",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /game/
+Disallow: /account
+Disallow: /api/
+
+Sitemap: https://pointification.de/sitemap.xml

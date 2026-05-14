@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
+import { useDialogs } from './Dialogs.jsx'
 
 // initial: null for new game, or full game object (with teams + user_id)
 export default function GameEditor({ initial, onClose, onSaved }) {
@@ -11,6 +12,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
   const isOwner = !isEdit || initial.user_id === user?.id
 
   const [name, setName] = useState(initial?.name ?? '')
+  const [allowNegative, setAllowNegative] = useState(!!initial?.allow_negative)
   const [teams, setTeams] = useState(
     initial?.teams?.length
       ? initial.teams.map(t => ({ ...t, _existing: true }))
@@ -35,12 +37,19 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     try {
       let gameId = initial?.id
       if (isEdit) {
-        const { error } = await supabase.from('games').update({ name }).eq('id', gameId)
+        const { error } = await supabase.from('games')
+          .update({ name, allow_negative: allowNegative })
+          .eq('id', gameId)
         if (error) throw error
       } else {
         const { data, error } = await supabase.rpc('create_game', { p_name: name })
         if (error) throw error
         gameId = data.id
+        if (allowNegative) {
+          const { error: e2 } = await supabase.from('games')
+            .update({ allow_negative: true }).eq('id', gameId)
+          if (e2) throw e2
+        }
       }
 
       const existing = initial?.teams ?? []
@@ -103,12 +112,32 @@ export default function GameEditor({ initial, onClose, onSaved }) {
 
           <label className="block text-sm font-semibold mb-1">Game name</label>
           <input
-            className="input-chunk mb-6"
+            className="input-chunk mb-4"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="Friday Quiz Night"
             autoFocus
           />
+
+          <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+            <div>
+              <label className="block text-sm font-semibold">Allow negative scores</label>
+              <p className="text-xs text-ink/60">When off, scores can't go below zero.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAllowNegative(v => !v)}
+              aria-pressed={allowNegative}
+              className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors ${allowNegative ? 'bg-candy-mint' : 'bg-white'}`}
+            >
+              <motion.span
+                layout
+                transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                className="absolute top-0.5 w-6 h-6 rounded-full bg-ink"
+                style={{ left: allowNegative ? 'calc(100% - 26px)' : '2px' }}
+              />
+            </button>
+          </div>
 
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-semibold">Teams</label>
@@ -181,8 +210,16 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
     setToken(data.public_token)
   }
 
+  const dialogs = useDialogs()
+
   const rotate = async () => {
-    if (!confirm('Generate a new link? The old one will stop working immediately.')) return
+    const ok = await dialogs.confirm({
+      title: 'Regenerate link?',
+      message: 'A new public link will be created. The current one will stop working immediately.',
+      confirmLabel: 'Regenerate',
+      tone: 'danger',
+    })
+    if (!ok) return
     setErr(null); setBusy(true)
     const { data, error } = await supabase.rpc('rotate_game_token', { p_game_id: gameId })
     setBusy(false)
@@ -293,8 +330,15 @@ function MembersSection({ gameId, ownerId }) {
     else { setMsg(`Invited ${email}.`); setEmail('') }
   }
 
-  const remove = async (userId) => {
-    if (!confirm('Remove this collaborator?')) return
+  const dialogs = useDialogs()
+  const remove = async (userId, label) => {
+    const ok = await dialogs.confirm({
+      title: 'Remove collaborator?',
+      message: `${label ?? 'This collaborator'} will lose access to the game. You can re-invite them later.`,
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase.from('game_members').delete()
       .eq('game_id', gameId).eq('user_id', userId)
     if (error) setErr(error.message)
@@ -329,7 +373,7 @@ function MembersSection({ gameId, ownerId }) {
                 <div className="text-xs text-ink/60">collaborator</div>
               </div>
               <button
-                onClick={() => remove(m.user_id)}
+                onClick={() => remove(m.user_id, m.profiles?.email)}
                 className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
               >Remove</button>
             </motion.div>
@@ -357,25 +401,46 @@ function MembersSection({ gameId, ownerId }) {
 
 function ColorPicker({ value, onChange }) {
   const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('touchstart', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('touchstart', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   return (
-    <div className="relative">
+    <div ref={wrapRef} className="relative shrink-0">
       <button
+        type="button"
         onClick={() => setOpen(o => !o)}
         className="w-10 h-10 rounded-xl border-2 border-ink"
         style={{ background: value }}
         title="Change color"
+        aria-haspopup="true"
+        aria-expanded={open}
       />
       {open && (
         <motion.div
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-          className="absolute z-30 mt-2 p-2 rounded-2xl border-2 border-ink bg-white shadow-chunk grid grid-cols-5 gap-1.5"
+          className="absolute left-0 top-12 z-50 p-3 rounded-2xl border-2 border-ink bg-white shadow-chunk grid grid-cols-5 gap-2 w-[15.5rem]"
         >
           {TEAM_PALETTE.map(c => (
             <button
               key={c}
+              type="button"
               onClick={() => { onChange(c); setOpen(false) }}
-              className={`w-7 h-7 rounded-lg border-2 border-ink ${value === c ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
+              className={`w-10 h-10 rounded-lg border-2 border-ink transition-transform hover:-translate-y-0.5 ${value === c ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
               style={{ background: c }}
+              aria-label={`Pick ${c}`}
             />
           ))}
         </motion.div>

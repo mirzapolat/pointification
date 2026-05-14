@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
+import { useDialogs } from '../components/Dialogs.jsx'
 
 export default function Account() {
   const { user, signOut } = useAuth()
@@ -171,9 +172,17 @@ function DangerCard({ onDeleted }) {
   const expected = user?.email ?? ''
   const canDelete = confirmText.trim().toLowerCase() === expected.toLowerCase()
 
+  const dialogs = useDialogs()
   const submit = async () => {
     setErr(null)
     if (!canDelete) return
+    const ok = await dialogs.confirm({
+      title: 'Delete account permanently?',
+      message: `${expected} and every game you own will be erased. This cannot be undone.`,
+      confirmLabel: 'Delete forever',
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(true)
     const { error } = await supabase.rpc('delete_my_account')
     setBusy(false)

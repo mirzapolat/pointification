@@ -2,13 +2,56 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#FFF8EC" />
-    <title>Pointification</title>
+    <meta name="color-scheme" content="light" />
+
+    <title>Pointification — live scoreboards for quizzes, classrooms & game days</title>
+    <meta name="description" content="Real-time scoreboards for quiz nights, classrooms, and game days. Share a link, watch scores update live. No installs, free to use." />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Pointification" />
+    <meta property="og:title" content="Pointification — live scoreboards" />
+    <meta property="og:description" content="Real-time scoreboards for quiz nights, classrooms, and game days. Share a link, watch scores update live." />
+    <meta property="og:image" content="/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Pointification — live scoreboards" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Pointification — live scoreboards" />
+    <meta name="twitter:description" content="Real-time scoreboards for quiz nights, classrooms, and game days." />
+    <meta name="twitter:image" content="/og-image.svg" />
+
+    <!-- SEO extras -->
+    <meta name="robots" content="index, follow" />
+    <meta name="application-name" content="Pointification" />
+    <meta name="apple-mobile-web-app-title" content="Pointification" />
+    <meta name="format-detection" content="telephone=no" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Pointification",
+        "description": "Real-time scoreboards for quiz nights, classrooms, and game days.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -16,6 +16,7 @@ export default function PointPopup({ team, onApply, onClose, busy }) {
   const apply = (n) => {
     if (!Number.isFinite(n) || n === 0) return
     onApply(n)
+    onClose()
   }
 
   const submitCustom = (e) => {

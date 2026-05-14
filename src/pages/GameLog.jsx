@@ -27,7 +27,7 @@ export default function GameLog() {
       supabase.from('games').select('id, name').eq('id', id).single(),
       supabase.from('teams').select('id, name, color, score').eq('game_id', id).order('position'),
       supabase.from('point_logs')
-        .select('id, team_id, delta, new_score, created_at')
+        .select('id, team_id, user_id, delta, new_score, created_at')
         .eq('game_id', id)
         .order('created_at', { ascending: true })
     ])
@@ -56,6 +56,24 @@ export default function GameLog() {
   }, [id])
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map(t => [t.id, t])), [teams])
+
+  const [emailMap, setEmailMap] = useState({})
+  useEffect(() => {
+    const ids = Array.from(new Set(logs.map(l => l.user_id).filter(Boolean)))
+    const missing = ids.filter(i => !(i in emailMap))
+    if (!missing.length) return
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('profiles').select('id, email').in('id', missing)
+      if (cancelled || !data) return
+      setEmailMap(prev => {
+        const next = { ...prev }
+        for (const p of data) next[p.id] = p.email
+        return next
+      })
+    })()
+    return () => { cancelled = true }
+  }, [logs])
 
   const scopeObj = SCOPES.find(s => s.id === scope)
   const since = scopeObj?.days
@@ -133,7 +151,7 @@ export default function GameLog() {
           ) : (
             <motion.div key="list"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <LogList logs={filteredLogs} teamMap={teamMap} />
+              <LogList logs={filteredLogs} teamMap={teamMap} emailMap={emailMap} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -142,7 +160,7 @@ export default function GameLog() {
   )
 }
 
-function LogList({ logs, teamMap }) {
+function LogList({ logs, teamMap, emailMap }) {
   if (logs.length === 0) {
     return (
       <div className="card-chunk p-10 text-center">
@@ -170,7 +188,12 @@ function LogList({ logs, teamMap }) {
               <div className="w-3 h-10 rounded-full" style={{ background: t?.color ?? '#ccc' }} />
               <div className="flex-1 min-w-0">
                 <div className="font-display font-semibold truncate">{t?.name ?? 'Deleted team'}</div>
-                <div className="text-xs text-ink/60">{formatDateTime(l.created_at)}</div>
+                <div className="text-xs text-ink/60 truncate">
+                  {formatDateTime(l.created_at)}
+                  {l.user_id && (
+                    <> · <span className="font-mono">{emailMap[l.user_id] ?? '…'}</span></>
+                  )}
+                </div>
               </div>
               <div className={`font-display font-bold text-xl tabular-nums ${pos ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {pos ? `+${l.delta}` : l.delta}
@@ -188,27 +211,54 @@ function LogList({ logs, teamMap }) {
 
 function ScoreGraph({ teams, logs, since }) {
   const W = 900, H = 360, P = { l: 44, r: 16, t: 16, b: 28 }
+  const DAY = 86400 * 1000
 
   const now = Date.now()
-  const startTs = since ?? (logs.length ? new Date(logs[0].created_at).getTime() : now - 7 * 86400 * 1000)
-  const endTs = now
+  const rawStart = since ?? (logs.length ? new Date(logs[0].created_at).getTime() : now - 6 * DAY)
 
-  // Build per-team series of (ts, score)
-  const series = useMemo(() => teams.map(team => {
-    const teamLogs = logs.filter(l => l.team_id === team.id)
-    // Score at start of window: derive from first in-window log's (new_score - delta).
-    // No pre-window logs are loaded, so if there are none we fall back to the team's current score.
-    let startScore = 0
-    if (teamLogs.length) {
-      startScore = teamLogs[0].new_score - teamLogs[0].delta
-    } else {
-      startScore = team.score
+  // Boundary timestamps to sample each team's score at. Every boundary is the
+  // end of a local day so the X spacing is uniform (no squished "today" point).
+  // Daily buckets for shorter scopes; weekly for 3 months and longer.
+  const boundaries = useMemo(() => {
+    const startDay = new Date(rawStart); startDay.setHours(0, 0, 0, 0)
+    const todayMidnight = new Date(now); todayMidnight.setHours(0, 0, 0, 0)
+    const todayEnd = todayMidnight.getTime() + DAY - 1
+    const spanDays = Math.max(1, Math.round((todayMidnight.getTime() - startDay.getTime()) / DAY) + 1)
+    const stride = (spanDays >= 90 ? 7 : 1) * DAY
+
+    const out = [todayEnd]
+    let t = todayEnd - stride
+    while (t >= startDay.getTime()) {
+      out.unshift(t)
+      t -= stride
     }
-    const pts = [{ ts: startTs, score: startScore }]
-    for (const l of teamLogs) pts.push({ ts: new Date(l.created_at).getTime(), score: l.new_score })
-    pts.push({ ts: endTs, score: pts[pts.length - 1].score })
-    return { team, pts }
-  }), [teams, logs, startTs, endTs])
+    return out
+  }, [rawStart, now])
+
+  const startTs = boundaries[0]
+  const endTs   = boundaries[boundaries.length - 1]
+
+  // For each team, walk the sorted logs once and record the score at the end
+  // of each day. Today's point uses "now" as its boundary, not end-of-day,
+  // so it reflects the current score.
+  const series = useMemo(() => teams.map(team => {
+    const teamLogs = logs
+      .filter(l => l.team_id === team.id)
+      .slice()
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    let cur = teamLogs.length
+      ? teamLogs[0].new_score - teamLogs[0].delta
+      : team.score
+    let i = 0
+    const pts = boundaries.map(b => {
+      while (i < teamLogs.length && new Date(teamLogs[i].created_at).getTime() <= b) {
+        cur = teamLogs[i].new_score
+        i++
+      }
+      return { ts: b, score: cur }
+    })
+    return { team, pts, markers: pts }
+  }), [teams, logs, boundaries])
 
   const allScores = series.flatMap(s => s.pts.map(p => p.score))
   let yMin = Math.min(0, ...allScores)
@@ -223,7 +273,16 @@ function ScoreGraph({ teams, logs, since }) {
 
   // ticks
   const yTicks = niceTicks(yMin, yMax, 5)
-  const xTicks = timeTicks(startTs, endTs, 6)
+  const xTicks = useMemo(() => {
+    const maxTicks = 8
+    const stride = Math.max(1, Math.ceil(boundaries.length / maxTicks))
+    const ticks = []
+    for (let i = 0; i < boundaries.length; i += stride) ticks.push(boundaries[i])
+    if (ticks[ticks.length - 1] !== boundaries[boundaries.length - 1]) {
+      ticks.push(boundaries[boundaries.length - 1])
+    }
+    return ticks
+  }, [boundaries])
 
   const hasData = logs.length > 0
   return (
@@ -250,7 +309,7 @@ function ScoreGraph({ teams, logs, since }) {
         <line x1={P.l} x2={P.l}     y1={P.t}      y2={H - P.b} stroke="#0F0F12" strokeWidth="2" />
 
         {/* lines */}
-        {series.map(({ team, pts }) => {
+        {series.map(({ team, pts, markers }) => {
           const d = pts.map((p, i) => `${i ? 'L' : 'M'} ${x(p.ts).toFixed(1)} ${y(p.score).toFixed(1)}`).join(' ')
           return (
             <g key={team.id}>
@@ -276,7 +335,7 @@ function ScoreGraph({ teams, logs, since }) {
                 animate={{ pathLength: 1 }}
                 transition={{ duration: 0.7, ease: 'easeOut' }}
               />
-              {pts.slice(1, -1).map((p, i) => (
+              {markers.map((p, i) => (
                 <circle key={i} cx={x(p.ts)} cy={y(p.score)} r="4.5" fill={team.color} stroke="#0F0F12" strokeWidth="2" />
               ))}
             </g>
@@ -304,12 +363,6 @@ function niceTicks(min, max, count) {
   const start = Math.ceil(min / s) * s
   const out = []
   for (let v = start; v <= max; v += s) out.push(Math.round(v * 1e6) / 1e6)
-  return out
-}
-
-function timeTicks(start, end, count) {
-  const out = []
-  for (let i = 0; i <= count; i++) out.push(start + (end - start) * (i / count))
   return out
 }
 

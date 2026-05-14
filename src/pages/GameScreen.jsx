@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import PointPopup from '../components/PointPopup.jsx'
+import { useDialogs } from '../components/Dialogs.jsx'
 
 export default function GameScreen() {
   const { id } = useParams()
@@ -14,10 +15,11 @@ export default function GameScreen() {
   const [active, setActive] = useState(null) // team id with popup open
   const [flash, setFlash] = useState({})     // { [teamId]: +n or -n }
   const [busy, setBusy] = useState(false)
+  const dialogs = useDialogs()
 
   const load = async () => {
     const [{ data: g }, { data: t }] = await Promise.all([
-      supabase.from('games').select('id, name').eq('id', id).single(),
+      supabase.from('games').select('id, name, allow_negative').eq('id', id).single(),
       supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position')
     ])
     setGame(g ?? null)
@@ -71,14 +73,21 @@ export default function GameScreen() {
 
   const applyDelta = async (teamId, delta) => {
     setBusy(true)
-    // optimistic
-    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score: t.score + delta } : t))
+    const allowNeg = !!game?.allow_negative
+    let effective = delta
+    setTeams(prev => prev.map(t => {
+      if (t.id !== teamId) return t
+      const target = t.score + delta
+      const clamped = !allowNeg && target < 0 ? -t.score : delta
+      effective = clamped
+      return { ...t, score: t.score + clamped }
+    }))
+    if (effective === 0) { setBusy(false); return }
     setFlash(f => ({ ...f, [teamId]: (f[teamId] ?? 0) + 1 }))
     const { error } = await supabase.rpc('apply_point_change', { p_team_id: teamId, p_delta: delta })
     if (error) {
-      // revert on failure
-      setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score: t.score - delta } : t))
-      alert('Could not apply: ' + error.message)
+      setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score: t.score - effective } : t))
+      dialogs.alert({ title: 'Could not apply', message: error.message })
     }
     setBusy(false)
   }
