@@ -30,7 +30,7 @@ export default function App() {
   const location = useLocation()
   return (
     <DialogProvider>
-      <AnimatePresence mode="wait">
+      <AnimatePresence initial={false}>
         <Routes location={location} key={location.pathname}>
           <Route path="/login" element={<Login />} />
           <Route path="/imprint" element={<Imprint />} />
