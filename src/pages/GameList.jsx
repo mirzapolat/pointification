@@ -170,6 +170,8 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
       <div className="flex border-t-2 border-ink">
         <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Edit</button>
         <div className="w-[2px] bg-ink" />
+        <Link to={`/game/${game.id}/log`} className="flex-1 py-2.5 font-display font-semibold text-center hover:bg-candy-mint transition">Log</Link>
+        <div className="w-[2px] bg-ink" />
         <button onClick={onDelete} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition">
           {isOwner ? 'Delete' : 'Leave'}
         </button>

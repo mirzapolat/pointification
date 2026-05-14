@@ -6,6 +6,7 @@ import GameList from './pages/GameList.jsx'
 import GameScreen from './pages/GameScreen.jsx'
 import Account from './pages/Account.jsx'
 import PublicGame from './pages/PublicGame.jsx'
+import GameLog from './pages/GameLog.jsx'
 
 function Protected({ children }) {
   const { session, loading } = useAuth()
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/p/:token" element={<PublicGame />} />
         <Route path="/" element={<Protected><GameList /></Protected>} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
+        <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
         <Route path="/account" element={<Protected><Account /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
