@@ -9,7 +9,7 @@ export default function Privacy() {
     >
       <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold">P!</div>
+          <img src="/pointification.png" alt="Pointification" className="w-10 h-10 object-contain" />
           <h1 className="font-display font-bold text-2xl">Pointification</h1>
         </Link>
         <Link to="/login" className="btn-chunk bg-white text-sm">← Back</Link>

@@ -39,7 +39,7 @@ export default function Login() {
         className="card-chunk relative z-10 w-full max-w-md p-8 mb-6"
       >
         <div className="flex items-center gap-2 mb-6">
-          <div className="w-10 h-10 rounded-2xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold text-xl">P!</div>
+          <img src="/pointification.png" alt="Pointification" className="w-10 h-10 object-contain" />
           <div>
             <h1 className="font-display text-3xl font-bold leading-none">Pointification</h1>
             <p className="text-ink/60 text-sm">keep score, beautifully.</p>

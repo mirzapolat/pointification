@@ -77,7 +77,7 @@ export default function GameList() {
     >
       <header className="px-4 md:px-10 py-4 md:py-6 flex items-center justify-between gap-3 border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
-          <div className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold shrink-0">P!</div>
+          <img src="/pointification.png" alt="Pointification" className="w-9 h-9 md:w-10 md:h-10 shrink-0 object-contain" />
           <div className="min-w-0">
             <h1 className="font-display font-bold text-xl md:text-2xl leading-none">Pointification</h1>
             <p className="text-ink/60 text-xs truncate">{user?.email}</p>

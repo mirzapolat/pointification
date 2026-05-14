@@ -7,13 +7,13 @@ export const config = { runtime: 'edge' }
 
 const CREAM = '#FFF8EC'
 const INK   = '#0F0F12'
-const YELLOW = '#FFD93D'
 const PINK   = '#FF4FA3'
 
 export default function handler(req) {
   const url = new URL(req.url)
   const name     = (url.searchParams.get('name')     || 'Pointification').slice(0, 60)
   const subtitle = (url.searchParams.get('subtitle') || 'Live scoreboard').slice(0, 80)
+  const iconUrl  = `${url.origin}/pointification.png`
 
   return new ImageResponse(
     (
@@ -41,24 +41,16 @@ export default function handler(req) {
 
         {/* Brand row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <div
+          <img
+            src={iconUrl}
+            width={112}
+            height={112}
             style={{
               width: 112,
               height: 112,
-              borderRadius: 28,
-              background: YELLOW,
-              border: `6px solid ${INK}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: 68,
-              color: INK,
-              lineHeight: 1,
+              objectFit: 'contain',
             }}
-          >
-            P!
-          </div>
+          />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 40, fontWeight: 800, color: INK, lineHeight: 1 }}>
               Pointification

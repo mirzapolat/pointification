@@ -93,7 +93,7 @@ export default function PublicGame() {
       className="fixed inset-0 flex flex-col bg-ink">
       <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold text-sm">P!</div>
+          <img src="/pointification.png" alt="Pointification" className="w-8 h-8 object-contain" />
           <span className="font-display font-semibold hidden sm:inline">Pointification</span>
         </div>
         <h1 className="font-display font-bold text-xl md:text-2xl truncate px-3">{game.name}</h1>
