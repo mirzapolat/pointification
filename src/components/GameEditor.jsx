@@ -38,7 +38,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
         const { error } = await supabase.from('games').update({ name }).eq('id', gameId)
         if (error) throw error
       } else {
-        const { data, error } = await supabase.from('games').insert({ name }).select().single()
+        const { data, error } = await supabase.rpc('create_game', { p_name: name })
         if (error) throw error
         gameId = data.id
       }
