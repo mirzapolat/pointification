@@ -10,3 +10,5 @@ if (!url || !anon) {
 export const supabase = createClient(url ?? 'http://localhost', anon ?? 'public-anon', {
   auth: { persistSession: true, autoRefreshToken: true }
 })
+
+if (typeof window !== 'undefined') window.supabase = supabase
