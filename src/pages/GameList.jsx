@@ -75,33 +75,37 @@ export default function GameList() {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full bg-cream bg-grid"
     >
-      <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold">P!</div>
-          <div>
-            <h1 className="font-display font-bold text-2xl leading-none">Pointification</h1>
-            <p className="text-ink/60 text-xs">{user?.email}</p>
+      <header className="px-4 md:px-10 py-4 md:py-6 flex items-center justify-between gap-3 border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
+        <div className="flex items-center gap-2.5 md:gap-3 min-w-0">
+          <div className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-candy-yellow border-2 border-ink grid place-items-center font-display font-bold shrink-0">P!</div>
+          <div className="min-w-0">
+            <h1 className="font-display font-bold text-xl md:text-2xl leading-none">Pointification</h1>
+            <p className="text-ink/60 text-xs truncate">{user?.email}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <NavLink to="/account" className="btn-chunk bg-white text-sm">Account</NavLink>
-          <button onClick={handleSignOut} className="btn-chunk bg-white text-sm">Sign out</button>
+        <div className="flex items-center gap-2 shrink-0">
+          <NavLink
+            to="/account"
+            aria-label="Account"
+            title="Account"
+            className="btn-chunk bg-white text-sm p-2 md:px-4 md:py-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="md:hidden"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <span className="hidden md:inline">Account</span>
+          </NavLink>
+          <button
+            onClick={handleSignOut}
+            aria-label="Sign out"
+            title="Sign out"
+            className="btn-chunk bg-white text-sm p-2 md:px-4 md:py-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="md:hidden"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span className="hidden md:inline">Sign out</span>
+          </button>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 md:px-10 py-10">
-        <div className="flex items-end justify-between gap-4 mb-8 flex-wrap">
-          <div>
-            <h2 className="font-display text-5xl md:text-6xl font-bold tracking-tight">
-              Your <span className="text-rainbow">games</span>.
-            </h2>
-            <p className="text-ink/60 mt-2">Track points for anything — quizzes, card nights, classroom teams.</p>
-          </div>
-          <button onClick={() => setEditing('new')} className="btn-chunk bg-candy-mint text-lg">
-            + New game
-          </button>
-        </div>
-
+      <main className="max-w-6xl mx-auto px-4 md:px-10 py-6 md:py-10">
         {loading ? (
           <SkeletonGrid />
         ) : games.length === 0 ? (
@@ -122,6 +126,7 @@ export default function GameList() {
                   />
                 )
               })}
+              <NewGameCard key="__new" i={games.length} onCreate={() => setEditing('new')} />
             </AnimatePresence>
           </motion.div>
         )}
@@ -201,6 +206,25 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
         </button>
       </div>
     </motion.div>
+  )
+}
+
+function NewGameCard({ i, onCreate }) {
+  return (
+    <motion.button
+      layout
+      onClick={onCreate}
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 20, delay: i * 0.03 }}
+      whileHover={{ y: -4, rotate: -0.5 }}
+      className="card-chunk overflow-hidden group min-h-[260px] flex flex-col items-center justify-center text-center p-8 bg-candy-mint/40 hover:bg-candy-mint transition"
+    >
+      <div className="w-14 h-14 rounded-2xl bg-white border-2 border-ink grid place-items-center font-display text-3xl font-bold mb-3">+</div>
+      <h3 className="font-display text-2xl font-bold leading-tight">New game</h3>
+      <p className="text-ink/60 text-sm mt-1">Start tracking points</p>
+    </motion.button>
   )
 }
 
