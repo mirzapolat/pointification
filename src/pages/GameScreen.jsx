@@ -27,15 +27,47 @@ export default function GameScreen() {
 
   useEffect(() => { load() }, [id])
 
-  // Realtime: keep scores in sync if changed elsewhere
+  // Realtime: keep scores, team list, and game metadata in sync across viewers.
   useEffect(() => {
     const channel = supabase.channel(`game:${id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` }, (payload) => {
-        setTeams(prev => prev.map(t => t.id === payload.new.id ? { ...t, score: payload.new.score } : t))
-      })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
+        (payload) => {
+          setTeams(prev => {
+            const idx = prev.findIndex(t => t.id === payload.new.id)
+            if (idx === -1) return prev
+            const prevScore = prev[idx].score
+            const next = [...prev]
+            next[idx] = { ...next[idx], ...payload.new }
+            // Flash only if score actually changed (not, e.g., rename)
+            if (payload.new.score !== prevScore) {
+              setFlash(f => ({ ...f, [payload.new.id]: (f[payload.new.id] ?? 0) + 1 }))
+            }
+            return next
+          })
+        })
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
+        (payload) => {
+          setTeams(prev => prev.some(t => t.id === payload.new.id)
+            ? prev
+            : [...prev, payload.new].sort((a, b) => a.position - b.position))
+        })
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
+        (payload) => {
+          setTeams(prev => prev.filter(t => t.id !== payload.old.id))
+          setActive(a => a === payload.old.id ? null : a)
+        })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` },
+        (payload) => setGame(g => g ? { ...g, ...payload.new } : g))
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'games', filter: `id=eq.${id}` },
+        () => nav('/', { replace: true }))
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [id])
+  }, [id, nav])
 
   const applyDelta = async (teamId, delta) => {
     setBusy(true)

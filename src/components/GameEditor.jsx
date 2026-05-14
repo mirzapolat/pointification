@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
 
-// initial: null for new, or full game object (with teams)
+// initial: null for new game, or full game object (with teams + user_id)
 export default function GameEditor({ initial, onClose, onSaved }) {
   const { user } = useAuth()
   const isEdit = !!initial
+  const isOwner = !isEdit || initial.user_id === user?.id
+
   const [name, setName] = useState(initial?.name ?? '')
   const [teams, setTeams] = useState(
     initial?.teams?.length
@@ -41,7 +43,6 @@ export default function GameEditor({ initial, onClose, onSaved }) {
         gameId = data.id
       }
 
-      // Sync teams
       const existing = initial?.teams ?? []
       const keptIds = teams.filter(t => t._existing).map(t => t.id)
       const toDelete = existing.filter(e => !keptIds.includes(e.id)).map(e => e.id)
@@ -71,7 +72,6 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     }
   }
 
-  // close on Esc
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -94,7 +94,10 @@ export default function GameEditor({ initial, onClose, onSaved }) {
       >
         <div className="p-6 md:p-8">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="font-display text-3xl font-bold">{isEdit ? 'Edit game' : 'New game'}</h2>
+            <h2 className="font-display text-3xl font-bold">
+              {isEdit ? 'Edit game' : 'New game'}
+              {isEdit && !isOwner && <span className="ml-2 text-sm font-semibold text-ink/60">(shared)</span>}
+            </h2>
             <button onClick={onClose} className="w-10 h-10 rounded-2xl border-2 border-ink bg-white grid place-items-center font-bold">×</button>
           </div>
 
@@ -136,6 +139,8 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             ))}
           </div>
 
+          {isEdit && isOwner && <MembersSection gameId={initial.id} ownerId={initial.user_id} />}
+
           {err && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="mt-4 px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/70 text-sm">
@@ -152,6 +157,105 @@ export default function GameEditor({ initial, onClose, onSaved }) {
         </div>
       </motion.div>
     </motion.div>
+  )
+}
+
+function MembersSection({ gameId, ownerId }) {
+  const [members, setMembers] = useState([])
+  const [ownerProfile, setOwnerProfile] = useState(null)
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [err, setErr] = useState(null)
+
+  const load = async () => {
+    const [{ data: mems }, { data: own }] = await Promise.all([
+      supabase.from('game_members')
+        .select('user_id, created_at, profiles:user_id (email)')
+        .eq('game_id', gameId)
+        .order('created_at'),
+      supabase.from('profiles').select('email').eq('id', ownerId).single()
+    ])
+    setMembers(mems ?? [])
+    setOwnerProfile(own ?? null)
+  }
+
+  useEffect(() => {
+    load()
+    const channel = supabase.channel(`members:${gameId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_members', filter: `game_id=eq.${gameId}` }, load)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [gameId])
+
+  const invite = async (e) => {
+    e.preventDefault()
+    setErr(null); setMsg(null); setBusy(true)
+    const { error } = await supabase.rpc('invite_collaborator', { p_game_id: gameId, p_email: email.trim() })
+    setBusy(false)
+    if (error) setErr(error.message)
+    else { setMsg(`Invited ${email}.`); setEmail('') }
+  }
+
+  const remove = async (userId) => {
+    if (!confirm('Remove this collaborator?')) return
+    const { error } = await supabase.from('game_members').delete()
+      .eq('game_id', gameId).eq('user_id', userId)
+    if (error) setErr(error.message)
+  }
+
+  return (
+    <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
+      <label className="block text-sm font-semibold mb-2">Collaborators</label>
+
+      <div className="space-y-2 mb-3">
+        <div className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-candy-yellow/40">
+          <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-yellow grid place-items-center font-bold">★</div>
+          <div className="flex-1 truncate">
+            <div className="font-semibold truncate">{ownerProfile?.email ?? '…'}</div>
+            <div className="text-xs text-ink/60">owner</div>
+          </div>
+        </div>
+
+        <AnimatePresence initial={false}>
+          {members.map(m => (
+            <motion.div
+              key={m.user_id}
+              layout
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
+              className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white"
+            >
+              <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-mint grid place-items-center font-bold">
+                {(m.profiles?.email ?? '?')[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1 truncate">
+                <div className="font-semibold truncate">{m.profiles?.email ?? '…'}</div>
+                <div className="text-xs text-ink/60">collaborator</div>
+              </div>
+              <button
+                onClick={() => remove(m.user_id)}
+                className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
+              >Remove</button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      <form onSubmit={invite} className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="invite by email (must have an account)"
+          className="input-chunk flex-1"
+        />
+        <button disabled={busy || !email} className="btn-chunk bg-candy-pink text-white disabled:opacity-60">
+          Invite
+        </button>
+      </form>
+      {err && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{err}</div>}
+      {msg && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-mint/50 text-sm">{msg}</div>}
+    </div>
   )
 }
 

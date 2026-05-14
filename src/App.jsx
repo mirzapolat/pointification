@@ -4,6 +4,7 @@ import { useAuth } from './lib/auth.jsx'
 import Login from './pages/Login.jsx'
 import GameList from './pages/GameList.jsx'
 import GameScreen from './pages/GameScreen.jsx'
+import Account from './pages/Account.jsx'
 
 function Protected({ children }) {
   const { session, loading } = useAuth()
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Protected><GameList /></Protected>} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
+        <Route path="/account" element={<Protected><Account /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>

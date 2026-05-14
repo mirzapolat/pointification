@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
@@ -10,13 +10,12 @@ export default function GameList() {
   const { user, signOut } = useAuth()
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState(null) // null | 'new' | game object
+  const [editing, setEditing] = useState(null)
 
   const load = async () => {
-    setLoading(true)
     const { data, error } = await supabase
       .from('games')
-      .select('id, name, created_at, updated_at, teams (id, name, color)')
+      .select('id, name, user_id, created_at, updated_at, teams (id, name, color)')
       .order('updated_at', { ascending: false })
     if (!error) setGames(data ?? [])
     setLoading(false)
@@ -24,10 +23,27 @@ export default function GameList() {
 
   useEffect(() => { load() }, [])
 
+  // Realtime: anything affecting which games we see/care about → reload.
+  useEffect(() => {
+    const channel = supabase.channel('games-list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },        load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' },        load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_members' }, load)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   const remove = async (game) => {
     if (!confirm(`Delete "${game.name}"? This cannot be undone.`)) return
-    await supabase.from('games').delete().eq('id', game.id)
-    load()
+    const { error } = await supabase.from('games').delete().eq('id', game.id)
+    if (error) alert(error.message)
+  }
+
+  const leave = async (game) => {
+    if (!confirm(`Leave "${game.name}"?`)) return
+    const { error } = await supabase.from('game_members').delete()
+      .eq('game_id', game.id).eq('user_id', user.id)
+    if (error) alert(error.message)
   }
 
   return (
@@ -43,7 +59,10 @@ export default function GameList() {
             <p className="text-ink/60 text-xs">{user?.email}</p>
           </div>
         </div>
-        <button onClick={signOut} className="btn-chunk bg-white text-sm">Sign out</button>
+        <div className="flex items-center gap-2">
+          <NavLink to="/account" className="btn-chunk bg-white text-sm">Account</NavLink>
+          <button onClick={signOut} className="btn-chunk bg-white text-sm">Sign out</button>
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 md:px-10 py-10">
@@ -66,15 +85,19 @@ export default function GameList() {
         ) : (
           <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <AnimatePresence>
-              {games.map((g, i) => (
-                <GameCard
-                  key={g.id}
-                  game={g}
-                  i={i}
-                  onEdit={() => setEditing(g)}
-                  onDelete={() => remove(g)}
-                />
-              ))}
+              {games.map((g, i) => {
+                const isOwner = g.user_id === user?.id
+                return (
+                  <GameCard
+                    key={g.id}
+                    game={g}
+                    i={i}
+                    isOwner={isOwner}
+                    onEdit={() => setEditing(g)}
+                    onDelete={() => isOwner ? remove(g) : leave(g)}
+                  />
+                )
+              })}
             </AnimatePresence>
           </motion.div>
         )}
@@ -93,7 +116,7 @@ export default function GameList() {
   )
 }
 
-function GameCard({ game, i, onEdit, onDelete }) {
+function GameCard({ game, i, isOwner, onEdit, onDelete }) {
   const accent = TEAM_PALETTE[i % TEAM_PALETTE.length]
   const teams = game.teams ?? []
   return (
@@ -115,6 +138,11 @@ function GameCard({ game, i, onEdit, onDelete }) {
           <div className="absolute bottom-2 right-3 font-display text-5xl font-bold text-ink/15">
             {teams.length || '0'}
           </div>
+          {!isOwner && (
+            <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
+              shared
+            </span>
+          )}
         </div>
         <div className="p-5">
           <h3 className="font-display text-2xl font-bold leading-tight truncate">{game.name}</h3>
@@ -142,7 +170,9 @@ function GameCard({ game, i, onEdit, onDelete }) {
       <div className="flex border-t-2 border-ink">
         <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Edit</button>
         <div className="w-[2px] bg-ink" />
-        <button onClick={onDelete} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition">Delete</button>
+        <button onClick={onDelete} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition">
+          {isOwner ? 'Delete' : 'Leave'}
+        </button>
       </div>
     </motion.div>
   )
