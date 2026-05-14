@@ -15,7 +15,7 @@ export default function GameList() {
   const load = async () => {
     const { data, error } = await supabase
       .from('games')
-      .select('id, name, user_id, created_at, updated_at, teams (id, name, color)')
+      .select('id, name, user_id, is_public, public_token, created_at, updated_at, teams (id, name, color)')
       .order('updated_at', { ascending: false })
     if (!error) setGames(data ?? [])
     setLoading(false)

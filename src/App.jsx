@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx'
 import GameList from './pages/GameList.jsx'
 import GameScreen from './pages/GameScreen.jsx'
 import Account from './pages/Account.jsx'
+import PublicGame from './pages/PublicGame.jsx'
 
 function Protected({ children }) {
   const { session, loading } = useAuth()
@@ -27,6 +28,7 @@ export default function App() {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<Login />} />
+        <Route path="/p/:token" element={<PublicGame />} />
         <Route path="/" element={<Protected><GameList /></Protected>} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
         <Route path="/account" element={<Protected><Account /></Protected>} />

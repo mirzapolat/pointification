@@ -139,6 +139,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             ))}
           </div>
 
+          {isEdit && isOwner && <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} />}
           {isEdit && isOwner && <MembersSection gameId={initial.id} ownerId={initial.user_id} />}
 
           {err && (
@@ -157,6 +158,101 @@ export default function GameEditor({ initial, onClose, onSaved }) {
         </div>
       </motion.div>
     </motion.div>
+  )
+}
+
+function SharingSection({ gameId, initialIsPublic, initialToken }) {
+  const [isPublic, setIsPublic] = useState(!!initialIsPublic)
+  const [token, setToken] = useState(initialToken ?? null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [copied, setCopied] = useState(false)
+
+  const url = token ? `${window.location.origin}/p/${token}` : ''
+
+  const toggle = async (enabled) => {
+    setErr(null); setBusy(true)
+    const { data, error } = await supabase.rpc('set_game_sharing', {
+      p_game_id: gameId, p_enabled: enabled
+    })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setIsPublic(data.is_public)
+    setToken(data.public_token)
+  }
+
+  const rotate = async () => {
+    if (!confirm('Generate a new link? The old one will stop working immediately.')) return
+    setErr(null); setBusy(true)
+    const { data, error } = await supabase.rpc('rotate_game_token', { p_game_id: gameId })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setToken(data.public_token)
+  }
+
+  const copy = async () => {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setErr('Could not copy. Select the link and copy manually.')
+    }
+  }
+
+  return (
+    <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <label className="block text-sm font-semibold">Public link</label>
+          <p className="text-xs text-ink/60">Anyone with the link can watch live. They can't change anything.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => toggle(!isPublic)}
+          disabled={busy}
+          aria-pressed={isPublic}
+          className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors disabled:opacity-60 ${isPublic ? 'bg-candy-mint' : 'bg-white'}`}
+        >
+          <motion.span
+            layout
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="absolute top-0.5 w-6 h-6 rounded-full bg-ink"
+            style={{ left: isPublic ? 'calc(100% - 26px)' : '2px' }}
+          />
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {isPublic && token && (
+          <motion.div
+            key="share-body"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <input
+                readOnly
+                value={url}
+                onFocus={e => e.target.select()}
+                className="input-chunk flex-1 font-mono text-sm bg-candy-yellow/40"
+              />
+              <button type="button" onClick={copy} className="btn-chunk bg-white">
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+              <button type="button" onClick={rotate} disabled={busy} className="btn-chunk bg-candy-pink text-white disabled:opacity-60">
+                Regenerate
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {err && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{err}</div>}
+    </div>
   )
 }
 
