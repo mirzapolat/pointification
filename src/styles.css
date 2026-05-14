@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #FFF8EC;
+  color: #0F0F12;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Confetti-y background dots */
+.bg-dots {
+  background-image: radial-gradient(#0F0F12 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(15,15,18,0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15,15,18,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Chunky outlined button */
+.btn-chunk {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border-2 border-ink font-display font-semibold shadow-chunk transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none hover:-translate-y-0.5;
+}
+
+.input-chunk {
+  @apply w-full px-4 py-3 rounded-2xl border-2 border-ink bg-white font-medium outline-none focus:shadow-chunk-sm focus:-translate-y-0.5 transition-all placeholder:text-ink/40;
+}
+
+.card-chunk {
+  @apply rounded-3xl border-2 border-ink bg-white shadow-chunk;
+}
+
+/* Hide scrollbar when needed */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* gradient text */
+.text-rainbow {
+  background: linear-gradient(90deg, #FF4FA3, #FFD93D 35%, #5EE2C1 65%, #4D7CFF);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
