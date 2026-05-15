@@ -1,5 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import Login from './pages/Login.jsx'
 import GameList from './pages/GameList.jsx'
@@ -34,22 +33,19 @@ function Splash() {
 }
 
 export default function App() {
-  const location = useLocation()
   return (
     <DialogProvider>
-      <AnimatePresence initial={false}>
-        <Routes location={location} key={location.pathname}>
-          <Route path="/login" element={<Login />} />
-          <Route path="/imprint" element={<Imprint />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/p/:token" element={<PublicGame />} />
-          <Route path="/" element={<Home />} />
-          <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
-          <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
-          <Route path="/account" element={<Protected><Account /></Protected>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AnimatePresence>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/imprint" element={<Imprint />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/p/:token" element={<PublicGame />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
+        <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
+        <Route path="/account" element={<Protected><Account /></Protected>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </DialogProvider>
   )
 }
