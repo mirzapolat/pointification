@@ -164,9 +164,9 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 200, damping: 20, delay: i * 0.03 }}
       whileHover={{ y: -4, rotate: -0.5 }}
-      className="card-chunk overflow-hidden group"
+      className="card-chunk overflow-hidden group flex flex-col h-full"
     >
-      <Link to={`/game/${game.id}`} className="block">
+      <Link to={`/game/${game.id}`} className="flex flex-col flex-1">
         <div
           className="h-28 border-b-2 border-ink relative overflow-hidden"
           style={{ background: accent }}
@@ -181,7 +181,7 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
             </span>
           )}
         </div>
-        <div className="p-5">
+        <div className="p-5 flex-1">
           <h3 className="font-display text-2xl font-bold leading-tight truncate">{game.name}</h3>
           <p className="text-ink/60 text-sm mt-1">
             {teams.length} {teams.length === 1 ? 'team' : 'teams'}
@@ -207,7 +207,7 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
       <div className="flex border-t-2 border-ink">
         <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Edit</button>
         <div className="w-[2px] bg-ink" />
-        <Link to={`/game/${game.id}/log`} className="flex-1 py-2.5 font-display font-semibold text-center hover:bg-candy-mint transition">Log</Link>
+        <Link to={`/game/${game.id}/log`} className="flex-1 py-2.5 font-display font-semibold text-center hover:bg-candy-mint transition">Details</Link>
         <div className="w-[2px] bg-ink" />
         <button onClick={onDelete} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition">
           {isOwner ? 'Delete' : 'Leave'}
