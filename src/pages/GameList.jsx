@@ -65,9 +65,17 @@ export default function GameList() {
       tone: 'danger',
     })
     if (!ok) return
-    const { error } = await supabase.from('game_members').delete()
+    const { data, error } = await supabase.from('game_members').delete()
       .eq('game_id', game.id).eq('user_id', user.id)
-    if (error) await dialogs.alert({ title: 'Could not leave', message: error.message })
+      .select('user_id')
+    if (error) return dialogs.alert({ title: 'Could not leave', message: error.message })
+    if (!data?.length) {
+      return dialogs.alert({
+        title: 'Could not leave',
+        message: 'The server refused to remove your membership. Please try again or contact the game owner.',
+      })
+    }
+    setGames(gs => gs.filter(x => x.id !== game.id))
   }
 
   return (

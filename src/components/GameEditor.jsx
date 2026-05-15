@@ -26,6 +26,13 @@ export default function GameEditor({ initial, onClose, onSaved }) {
   }
   const removeTeam = (id) => setTeams(ts => ts.filter(t => t.id !== id))
   const updateTeam = (id, patch) => setTeams(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t))
+  const moveTeam = (index, dir) => setTeams(ts => {
+    const j = index + dir
+    if (j < 0 || j >= ts.length) return ts
+    const next = ts.slice()
+    ;[next[index], next[j]] = [next[j], next[index]]
+    return next
+  })
 
   const save = async () => {
     setErr(null)
@@ -152,6 +159,24 @@ export default function GameEditor({ initial, onClose, onSaved }) {
                 initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
                 className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-cream"
               >
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => moveTeam(i, -1)}
+                    disabled={i === 0}
+                    className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
+                    title="Move up"
+                    aria-label="Move up"
+                  >▲</button>
+                  <button
+                    type="button"
+                    onClick={() => moveTeam(i, 1)}
+                    disabled={i === teams.length - 1}
+                    className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
+                    title="Move down"
+                    aria-label="Move down"
+                  >▼</button>
+                </div>
                 <ColorPicker value={t.color} onChange={c => updateTeam(t.id, { color: c })} />
                 <input
                   className="flex-1 px-3 py-2 rounded-xl border-2 border-ink bg-white outline-none font-medium"
