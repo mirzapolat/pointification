@@ -256,7 +256,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ y: 60, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 200, damping: 22 }}
-        className="card-chunk w-full md:max-w-2xl max-h-[92vh] overflow-y-auto"
+        className="card-chunk w-full md:max-w-2xl max-h-[92vh] overflow-y-auto no-scrollbar"
       >
         <div className="p-6 md:p-8">
           <div className="flex items-center justify-between mb-5">
