@@ -13,11 +13,12 @@ export default function GameList() {
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
+  const [showArchived, setShowArchived] = useState(false)
 
   const load = async () => {
     const { data, error } = await supabase
       .from('games')
-      .select('id, name, user_id, is_public, public_token, created_at, updated_at, teams (id, name, color)')
+      .select('id, name, user_id, is_public, public_token, archived_at, created_at, updated_at, teams (id, name, color)')
       .order('updated_at', { ascending: false })
     if (!error) setGames(data ?? [])
     setLoading(false)
@@ -43,6 +44,14 @@ export default function GameList() {
       tone: 'neutral',
     })
     if (ok) await signOut()
+  }
+
+  const archive = async (game) => {
+    const archived = !!game.archived_at
+    const { error } = await supabase.from('games')
+      .update({ archived_at: archived ? null : new Date().toISOString() })
+      .eq('id', game.id)
+    if (error) await dialogs.alert({ title: archived ? 'Could not unarchive' : 'Could not archive', message: error.message })
   }
 
   const remove = async (game) => {
@@ -118,26 +127,73 @@ export default function GameList() {
           <SkeletonGrid />
         ) : games.length === 0 ? (
           <EmptyState onCreate={() => setEditing('new')} />
-        ) : (
-          <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            <AnimatePresence>
-              {games.map((g, i) => {
-                const isOwner = g.user_id === user?.id
-                return (
-                  <GameCard
-                    key={g.id}
-                    game={g}
-                    i={i}
-                    isOwner={isOwner}
-                    onEdit={() => setEditing(g)}
-                    onDelete={() => isOwner ? remove(g) : leave(g)}
-                  />
-                )
-              })}
-              <NewGameCard key="__new" i={games.length} onCreate={() => setEditing('new')} />
-            </AnimatePresence>
-          </motion.div>
-        )}
+        ) : (() => {
+          const active = games.filter(g => !g.archived_at)
+          const archived = games.filter(g => g.archived_at)
+          return (
+            <>
+              <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <AnimatePresence>
+                  {active.map((g, i) => {
+                    const isOwner = g.user_id === user?.id
+                    return (
+                      <GameCard
+                        key={g.id}
+                        game={g}
+                        i={i}
+                        isOwner={isOwner}
+                        onEdit={() => setEditing(g)}
+                        onArchive={isOwner ? () => archive(g) : null}
+                        onDelete={() => isOwner ? remove(g) : leave(g)}
+                      />
+                    )
+                  })}
+                  <NewGameCard key="__new" i={active.length} onCreate={() => setEditing('new')} />
+                </AnimatePresence>
+              </motion.div>
+
+              {archived.length > 0 && (
+                <div className="mt-10">
+                  <button
+                    onClick={() => setShowArchived(s => !s)}
+                    className="flex items-center gap-2 font-display font-semibold text-ink/60 hover:text-ink transition mb-4"
+                  >
+                    <span className={`inline-block transition-transform ${showArchived ? 'rotate-90' : ''}`}>▶</span>
+                    Archived ({archived.length})
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {showArchived && (
+                      <motion.div
+                        key="archived-grid"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-1 pb-2">
+                          {archived.map((g, i) => {
+                            const isOwner = g.user_id === user?.id
+                            return (
+                              <GameCard
+                                key={g.id}
+                                game={g}
+                                i={i}
+                                isOwner={isOwner}
+                                onEdit={() => setEditing(g)}
+                                onArchive={isOwner ? () => archive(g) : null}
+                                onDelete={() => isOwner ? remove(g) : leave(g)}
+                              />
+                            )
+                          })}
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </>
+          )
+        })()}
       </main>
 
       <AnimatePresence>
@@ -153,9 +209,10 @@ export default function GameList() {
   )
 }
 
-function GameCard({ game, i, isOwner, onEdit, onDelete }) {
+function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
   const accent = TEAM_PALETTE[i % TEAM_PALETTE.length]
   const teams = game.teams ?? []
+  const isArchived = !!game.archived_at
   return (
     <motion.div
       layout
@@ -164,7 +221,7 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 200, damping: 20, delay: i * 0.03 }}
       whileHover={{ y: -4, rotate: -0.5 }}
-      className="card-chunk overflow-hidden group flex flex-col h-full"
+      className={`card-chunk overflow-hidden group flex flex-col h-full ${isArchived ? 'opacity-70' : ''}`}
     >
       <Link to={`/game/${game.id}`} className="flex flex-col flex-1">
         <div
@@ -175,11 +232,18 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
           <div className="absolute bottom-2 right-3 font-display text-5xl font-bold text-ink/15">
             {teams.length || '0'}
           </div>
-          {!isOwner && (
-            <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
-              shared
-            </span>
-          )}
+          <div className="absolute top-3 left-3 flex gap-1.5">
+            {!isOwner && (
+              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
+                shared
+              </span>
+            )}
+            {isArchived && (
+              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-white text-xs font-bold uppercase tracking-wider">
+                archived
+              </span>
+            )}
+          </div>
         </div>
         <div className="p-5 flex-1">
           <h3 className="font-display text-2xl font-bold leading-tight truncate">{game.name}</h3>
@@ -208,6 +272,14 @@ function GameCard({ game, i, isOwner, onEdit, onDelete }) {
         <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Edit</button>
         <div className="w-[2px] bg-ink" />
         <Link to={`/game/${game.id}/log`} className="flex-1 py-2.5 font-display font-semibold text-center hover:bg-candy-mint transition">Details</Link>
+        {onArchive && (
+          <>
+            <div className="w-[2px] bg-ink" />
+            <button onClick={onArchive} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-blue hover:text-white transition">
+              {isArchived ? 'Unarchive' : 'Archive'}
+            </button>
+          </>
+        )}
         <div className="w-[2px] bg-ink" />
         <button onClick={onDelete} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition">
           {isOwner ? 'Delete' : 'Leave'}
