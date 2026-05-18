@@ -10,41 +10,182 @@ export default function GameEditor({ initial, onClose, onSaved }) {
   const { user } = useAuth()
   const isEdit = !!initial
   const isOwner = !isEdit || initial.user_id === user?.id
+  const instant = isEdit  // every change writes through immediately
 
   const [name, setName] = useState(initial?.name ?? '')
   const [allowNegative, setAllowNegative] = useState(!!initial?.allow_negative)
   const [teams, setTeams] = useState(
     initial?.teams?.length
-      ? initial.teams.map(t => ({ ...t, _existing: true }))
+      ? initial.teams.map(t => ({ ...t }))
       : [{ id: tmp(), name: 'Team 1', color: TEAM_PALETTE[0] }, { id: tmp(), name: 'Team 2', color: TEAM_PALETTE[1] }]
   )
 
   // Logo state
-  const [logoPath] = useState(initial?.logo_path ?? null)
+  const [logoPath, setLogoPath] = useState(initial?.logo_path ?? null)
   const [logoPlacement, setLogoPlacement] = useState(initial?.logo_placement ?? 'center')
+  const [logoShape, setLogoShape] = useState(initial?.logo_shape ?? 'circle')
+  const [logoScale, setLogoScale] = useState(initial?.logo_scale ?? 0.8)
   const [pendingFile, setPendingFile] = useState(null)
   const [pendingPreview, setPendingPreview] = useState(null)
   const [removeLogo, setRemoveLogo] = useState(false)
+  const [logoBusy, setLogoBusy] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
   useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview) }, [pendingPreview])
 
-  const addTeam = () => {
-    setTeams(ts => [...ts, { id: tmp(), name: `Team ${ts.length + 1}`, color: nextColor(ts.map(t => t.color)) }])
+  // --- Instant-apply primitives (edit mode) ---
+  const patchGame = async (patch) => {
+    const { error } = await supabase.from('games').update(patch).eq('id', initial.id)
+    if (error) setErr(error.message)
   }
-  const removeTeam = (id) => setTeams(ts => ts.filter(t => t.id !== id))
-  const updateTeam = (id, patch) => setTeams(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t))
-  const moveTeam = (index, dir) => setTeams(ts => {
-    const j = index + dir
-    if (j < 0 || j >= ts.length) return ts
-    const next = ts.slice()
-    ;[next[index], next[j]] = [next[j], next[index]]
-    return next
-  })
 
-  const save = async () => {
+  const commitName = async () => {
+    if (!instant) return
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === initial.name) return
+    setName(trimmed)
+    await patchGame({ name: trimmed })
+  }
+
+  const toggleNegative = async () => {
+    const next = !allowNegative
+    setAllowNegative(next)
+    if (instant) await patchGame({ allow_negative: next })
+  }
+
+  const addTeam = async () => {
+    const color = nextColor(teams.map(t => t.color))
+    const newName = `Team ${teams.length + 1}`
+    if (instant) {
+      const { data, error } = await supabase.from('teams')
+        .insert({ game_id: initial.id, name: newName, color, position: teams.length })
+        .select('id, name, color, score, position')
+        .single()
+      if (error) { setErr(error.message); return }
+      setTeams(ts => [...ts, data])
+    } else {
+      setTeams(ts => [...ts, { id: tmp(), name: newName, color }])
+    }
+  }
+
+  const removeTeam = async (id) => {
+    if (instant && !String(id).startsWith('tmp-')) {
+      const { error } = await supabase.from('teams').delete().eq('id', id)
+      if (error) { setErr(error.message); return }
+    }
+    setTeams(ts => ts.filter(t => t.id !== id))
+  }
+
+  const updateTeam = async (id, patch) => {
+    setTeams(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t))
+    if (instant && !String(id).startsWith('tmp-')) {
+      const { error } = await supabase.from('teams').update(patch).eq('id', id)
+      if (error) setErr(error.message)
+    }
+  }
+
+  const commitTeamName = async (id, value) => {
+    const v = value.trim()
+    if (!v) return
+    if (!instant || String(id).startsWith('tmp-')) return
+    setTeams(ts => ts.map(t => t.id === id ? { ...t, name: v } : t))
+    const { error } = await supabase.from('teams').update({ name: v }).eq('id', id)
+    if (error) setErr(error.message)
+  }
+
+  const moveTeam = async (index, dir) => {
+    const j = index + dir
+    if (j < 0 || j >= teams.length) return
+    const next = teams.slice()
+    ;[next[index], next[j]] = [next[j], next[index]]
+    setTeams(next)
+    if (instant) {
+      const a = next[index], b = next[j]
+      // Reassign positions for the two swapped rows.
+      if (!String(a.id).startsWith('tmp-')) {
+        await supabase.from('teams').update({ position: index }).eq('id', a.id)
+      }
+      if (!String(b.id).startsWith('tmp-')) {
+        await supabase.from('teams').update({ position: j }).eq('id', b.id)
+      }
+    }
+  }
+
+  // --- Logo handlers ---
+  const handleLogoFile = async (file) => {
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+    setErr(null)
+    setRemoveLogo(false)
+    if (!instant) {
+      // New-game flow: hold the file until create.
+      setPendingFile(file)
+      setPendingPreview(file ? URL.createObjectURL(file) : null)
+      return
+    }
+    if (!file) return
+    setLogoBusy(true)
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+      const safeExt = /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png'
+      const newPath = `${user.id}/${initial.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
+      const { error: upErr } = await supabase.storage
+        .from('game-logos')
+        .upload(newPath, file, { contentType: file.type, upsert: false })
+      if (upErr) throw upErr
+      if (logoPath) await supabase.storage.from('game-logos').remove([logoPath])
+      const placement = logoPlacement || 'center'
+      await patchGame({ logo_path: newPath, logo_placement: placement })
+      setLogoPath(newPath)
+      setLogoPlacement(placement)
+    } catch (e) {
+      setErr(e.message ?? 'Could not upload logo.')
+    } finally {
+      setLogoBusy(false)
+    }
+  }
+
+  const handleLogoPlacement = async (p) => {
+    setLogoPlacement(p)
+    if (instant && logoPath) await patchGame({ logo_placement: p })
+  }
+
+  const handleLogoShape = async (s) => {
+    setLogoShape(s)
+    if (instant) await patchGame({ logo_shape: s })
+  }
+
+  const handleLogoScale = async (v) => {
+    const next = Math.max(0.4, Math.min(1.6, Math.round(v * 100) / 100))
+    setLogoScale(next)
+    if (instant) await patchGame({ logo_scale: next })
+  }
+
+  const handleLogoClear = async () => {
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+    setPendingFile(null)
+    setPendingPreview(null)
+    if (!instant) {
+      // New-game flow: just forget the pending file.
+      if (logoPath) setRemoveLogo(true)
+      return
+    }
+    if (!logoPath) return
+    setLogoBusy(true)
+    try {
+      await supabase.storage.from('game-logos').remove([logoPath])
+      await patchGame({ logo_path: null, logo_placement: null })
+      setLogoPath(null)
+    } catch (e) {
+      setErr(e.message ?? 'Could not remove logo.')
+    } finally {
+      setLogoBusy(false)
+    }
+  }
+
+  // --- New-game create flow (only used when isEdit === false) ---
+  const create = async () => {
     setErr(null)
     if (!name.trim()) return setErr('Name your game.')
     if (teams.length < 1) return setErr('Add at least one team.')
@@ -52,75 +193,39 @@ export default function GameEditor({ initial, onClose, onSaved }) {
 
     setBusy(true)
     try {
-      let gameId = initial?.id
-      if (isEdit) {
-        const { error } = await supabase.from('games')
-          .update({ name, allow_negative: allowNegative })
+      const { data, error } = await supabase.rpc('create_game', { p_name: name })
+      if (error) throw error
+      const gameId = data.id
+      if (allowNegative) {
+        const { error: e2 } = await supabase.from('games')
+          .update({ allow_negative: true }).eq('id', gameId)
+        if (e2) throw e2
+      }
+
+      if (pendingFile) {
+        const ext = (pendingFile.name.split('.').pop() || 'png').toLowerCase()
+        const safeExt = /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png'
+        const newPath = `${user.id}/${gameId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
+        const { error: upErr } = await supabase.storage
+          .from('game-logos')
+          .upload(newPath, pendingFile, { contentType: pendingFile.type, upsert: false })
+        if (upErr) throw upErr
+        const { error: lErr } = await supabase.from('games')
+          .update({
+            logo_path: newPath,
+            logo_placement: logoPlacement || 'center',
+            logo_shape: logoShape,
+            logo_scale: logoScale,
+          })
           .eq('id', gameId)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.rpc('create_game', { p_name: name })
-        if (error) throw error
-        gameId = data.id
-        if (allowNegative) {
-          const { error: e2 } = await supabase.from('games')
-            .update({ allow_negative: true }).eq('id', gameId)
-          if (e2) throw e2
-        }
-      }
-
-      if (isOwner) {
-        // Logo: upload new, remove existing, or just update placement.
-        let nextPath = logoPath
-        let nextPlacement = logoPath ? logoPlacement : null
-
-        if (pendingFile) {
-          const ext = (pendingFile.name.split('.').pop() || 'png').toLowerCase()
-          const safeExt = /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png'
-          const newPath = `${user.id}/${gameId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
-          const { error: upErr } = await supabase.storage
-            .from('game-logos')
-            .upload(newPath, pendingFile, { contentType: pendingFile.type, upsert: false })
-          if (upErr) throw upErr
-          if (logoPath) {
-            await supabase.storage.from('game-logos').remove([logoPath])
-          }
-          nextPath = newPath
-          nextPlacement = logoPlacement
-        } else if (removeLogo && logoPath) {
-          await supabase.storage.from('game-logos').remove([logoPath])
-          nextPath = null
-          nextPlacement = null
-        }
-
-        if (nextPath !== (initial?.logo_path ?? null) || nextPlacement !== (initial?.logo_placement ?? null)) {
-          const { error: lErr } = await supabase.from('games')
-            .update({ logo_path: nextPath, logo_placement: nextPlacement })
-            .eq('id', gameId)
-          if (lErr) throw lErr
-        }
-      }
-
-      const existing = initial?.teams ?? []
-      const keptIds = teams.filter(t => t._existing).map(t => t.id)
-      const toDelete = existing.filter(e => !keptIds.includes(e.id)).map(e => e.id)
-      if (toDelete.length) {
-        const { error } = await supabase.from('teams').delete().in('id', toDelete)
-        if (error) throw error
+        if (lErr) throw lErr
       }
 
       for (let i = 0; i < teams.length; i++) {
         const t = teams[i]
-        if (t._existing) {
-          const { error } = await supabase.from('teams')
-            .update({ name: t.name, color: t.color, position: i })
-            .eq('id', t.id)
-          if (error) throw error
-        } else {
-          const { error } = await supabase.from('teams')
-            .insert({ game_id: gameId, name: t.name, color: t.color, position: i })
-          if (error) throw error
-        }
+        const { error } = await supabase.from('teams')
+          .insert({ game_id: gameId, name: t.name, color: t.color, position: i })
+        if (error) throw error
       }
       onSaved()
     } catch (e) {
@@ -164,8 +269,10 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             className="input-chunk mb-4"
             value={name}
             onChange={e => setName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
             placeholder="Friday Quiz Night"
-            autoFocus
+            autoFocus={!isEdit}
           />
 
           <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
@@ -175,7 +282,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             </div>
             <button
               type="button"
-              onClick={() => setAllowNegative(v => !v)}
+              onClick={toggleNegative}
               aria-pressed={allowNegative}
               className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors ${allowNegative ? 'bg-candy-mint' : 'bg-white'}`}
             >
@@ -192,21 +299,16 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             <LogoSection
               logoPath={logoPath}
               placement={logoPlacement}
+              shape={logoShape}
+              scale={logoScale}
               pendingPreview={pendingPreview}
               removeLogo={removeLogo}
-              onFile={(file) => {
-                if (pendingPreview) URL.revokeObjectURL(pendingPreview)
-                setPendingFile(file)
-                setPendingPreview(file ? URL.createObjectURL(file) : null)
-                setRemoveLogo(false)
-              }}
-              onPlacement={setLogoPlacement}
-              onClear={() => {
-                if (pendingPreview) URL.revokeObjectURL(pendingPreview)
-                setPendingFile(null)
-                setPendingPreview(null)
-                if (logoPath) setRemoveLogo(true)
-              }}
+              busy={logoBusy}
+              onFile={handleLogoFile}
+              onPlacement={handleLogoPlacement}
+              onShape={handleLogoShape}
+              onScale={handleLogoScale}
+              onClear={handleLogoClear}
             />
           )}
 
@@ -242,7 +344,9 @@ export default function GameEditor({ initial, onClose, onSaved }) {
                 <input
                   className="flex-1 px-3 py-2 rounded-xl border-2 border-ink bg-white outline-none font-medium"
                   value={t.name}
-                  onChange={e => updateTeam(t.id, { name: e.target.value })}
+                  onChange={e => setTeams(ts => ts.map(x => x.id === t.id ? { ...x, name: e.target.value } : x))}
+                  onBlur={e => commitTeamName(t.id, e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
                   placeholder={`Team ${i + 1}`}
                 />
                 <button
@@ -273,10 +377,18 @@ export default function GameEditor({ initial, onClose, onSaved }) {
           )}
 
           <div className="flex gap-2 mt-6">
-            <button onClick={onClose} className="btn-chunk bg-white flex-1">Cancel</button>
-            <button onClick={save} disabled={busy} className="btn-chunk bg-candy-mint flex-1 text-lg disabled:opacity-60">
-              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create game'}
-            </button>
+            {isEdit ? (
+              <button onClick={onClose} className="btn-chunk bg-candy-mint flex-1 text-lg">
+                Done
+              </button>
+            ) : (
+              <>
+                <button onClick={onClose} className="btn-chunk bg-white flex-1">Cancel</button>
+                <button onClick={create} disabled={busy} className="btn-chunk bg-candy-mint flex-1 text-lg disabled:opacity-60">
+                  {busy ? 'Creating…' : 'Create game'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </motion.div>
@@ -284,7 +396,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
   )
 }
 
-function LogoSection({ logoPath, placement, pendingPreview, removeLogo, onFile, onPlacement, onClear }) {
+function LogoSection({ logoPath, placement, shape, scale, pendingPreview, removeLogo, busy, onFile, onPlacement, onShape, onScale, onClear }) {
   const fileRef = useRef(null)
   const [localErr, setLocalErr] = useState(null)
   const currentUrl = pendingPreview || (!removeLogo && logoPath ? logoUrl(logoPath) : null)
@@ -328,7 +440,12 @@ function LogoSection({ logoPath, placement, pendingPreview, removeLogo, onFile, 
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pick} />
 
         <div className="flex-1 min-w-0">
-          {hasLogo ? (
+          {busy ? (
+            <>
+              <div className="text-sm font-semibold">Uploading…</div>
+              <p className="text-xs text-ink/60">Hang tight for a sec.</p>
+            </>
+          ) : hasLogo ? (
             <>
               <div className="text-sm font-semibold">{pendingPreview ? 'New logo ready' : 'Logo uploaded'}</div>
               <p className="text-xs text-ink/60">Click the preview to change it.</p>
@@ -389,6 +506,77 @@ function LogoSection({ logoPath, placement, pendingPreview, removeLogo, onFile, 
               <p className="text-xs text-ink/60 mt-2">
                 The logo always appears on the game card in your list — these options control the game screen and public link.
               </p>
+
+              <AnimatePresence initial={false}>
+                {placement === 'center' && (
+                  <motion.div
+                    key="center-tuning"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-3 p-3 rounded-2xl border-2 border-dashed border-ink/20 space-y-3">
+                      {/* Live preview + shape toggle */}
+                      <div className="flex items-center gap-3">
+                        <BadgePreview src={currentUrl} shape={shape} scale={scale} />
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold mb-1.5">Badge shape</div>
+                          <div className="flex gap-2">
+                            <ShapeChip active={shape === 'circle'} onClick={() => onShape('circle')} label="Circle">
+                              <span className="w-5 h-5 rounded-full border-2 border-ink bg-white block" />
+                            </ShapeChip>
+                            <ShapeChip active={shape === 'square'} onClick={() => onShape('square')} label="Rounded">
+                              <span className="w-5 h-5 rounded-md border-2 border-ink bg-white block" />
+                            </ShapeChip>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Scale stepper */}
+                      <div>
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <div className="text-sm font-semibold">Logo size</div>
+                          <div className="text-xs text-ink/60">{Math.round(scale * 100)}%</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onScale(scale - 0.05)}
+                            disabled={scale <= 0.4}
+                            className="w-10 h-10 rounded-xl border-2 border-ink bg-white font-display text-xl font-bold hover:bg-candy-yellow transition disabled:opacity-40"
+                            aria-label="Smaller"
+                          >−</button>
+                          <input
+                            type="range"
+                            min={40} max={160} step={5}
+                            value={Math.round(scale * 100)}
+                            onChange={e => onScale(Number(e.target.value) / 100)}
+                            className="flex-1 accent-candy-pink py-2"
+                            aria-label="Logo size"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => onScale(scale + 0.05)}
+                            disabled={scale >= 1.6}
+                            className="w-10 h-10 rounded-xl border-2 border-ink bg-white font-display text-xl font-bold hover:bg-candy-mint transition disabled:opacity-40"
+                            aria-label="Bigger"
+                          >+</button>
+                          <button
+                            type="button"
+                            onClick={() => onScale(0.8)}
+                            className="text-xs font-semibold text-ink/70 hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink"
+                            title="Reset to 80%"
+                          >Reset</button>
+                        </div>
+                        <p className="text-xs text-ink/60 mt-1.5">
+                          Crank it up to crop out built-in whitespace, or shrink it for a roomier bubble.
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}
@@ -398,6 +586,35 @@ function LogoSection({ logoPath, placement, pendingPreview, removeLogo, onFile, 
         <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{localErr}</div>
       )}
     </div>
+  )
+}
+
+function BadgePreview({ src, shape, scale }) {
+  const radius = shape === 'square' ? 'rounded-xl' : 'rounded-full'
+  const pct = Math.round(scale * 100)
+  return (
+    <div className={`shrink-0 w-20 h-20 ${radius} border-2 border-ink bg-white shadow-chunk-sm grid place-items-center overflow-hidden`}>
+      {src ? (
+        <img src={src} alt="" className="object-contain" style={{ width: `${pct}%`, height: `${pct}%` }} />
+      ) : (
+        <div className="text-[10px] text-ink/50 font-semibold">no logo</div>
+      )}
+    </div>
+  )
+}
+
+function ShapeChip({ active, onClick, label, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-ink font-display font-semibold text-sm transition ${
+        active ? 'bg-candy-mint shadow-chunk-sm -translate-y-0.5' : 'bg-white hover:bg-cream'
+      }`}
+    >
+      {children}
+      <span>{label}</span>
+    </button>
   )
 }
 
@@ -671,10 +888,21 @@ function MembersSection({ gameId }) {
 function ColorPicker({ value, onChange }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
+  const customRef = useRef(null)
+  const [pickingCustom, setPickingCustom] = useState(false)
+  const [hexDraft, setHexDraft] = useState(value ?? '')
+
+  const sameHex = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase()
+  const isCustom = !!value && !TEAM_PALETTE.some(c => sameHex(c, value))
+
+  useEffect(() => { setHexDraft(value ?? '') }, [value])
 
   useEffect(() => {
     if (!open) return
-    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    const onDown = (e) => {
+      if (pickingCustom) return
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+    }
     const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
     window.addEventListener('mousedown', onDown)
     window.addEventListener('touchstart', onDown)
@@ -684,7 +912,24 @@ function ColorPicker({ value, onChange }) {
       window.removeEventListener('touchstart', onDown)
       window.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, pickingCustom])
+
+  const openNative = () => {
+    setPickingCustom(true)
+    customRef.current?.click()
+    setTimeout(() => setPickingCustom(false), 400)
+  }
+
+  const onNativeChange = (e) => {
+    onChange(e.target.value)
+  }
+
+  const commitHex = (raw) => {
+    const v = raw.trim()
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(v)
+    if (!m) { setHexDraft(value ?? ''); return }
+    onChange(`#${m[1].toUpperCase()}`)
+  }
 
   return (
     <div ref={wrapRef} className="relative shrink-0">
@@ -700,18 +945,60 @@ function ColorPicker({ value, onChange }) {
       {open && (
         <motion.div
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-          className="absolute left-0 top-12 z-50 p-3 rounded-2xl border-2 border-ink bg-white shadow-chunk grid grid-cols-5 gap-2 w-[15.5rem]"
+          className="absolute left-0 top-12 z-50 p-3 rounded-2xl border-2 border-ink bg-white shadow-chunk w-[15.5rem]"
         >
-          {TEAM_PALETTE.map(c => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => { onChange(c); setOpen(false) }}
-              className={`w-10 h-10 rounded-lg border-2 border-ink transition-transform hover:-translate-y-0.5 ${value === c ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
-              style={{ background: c }}
-              aria-label={`Pick ${c}`}
-            />
-          ))}
+          <div className="grid grid-cols-5 gap-2">
+            {TEAM_PALETTE.map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => { onChange(c); setOpen(false) }}
+                className={`w-10 h-10 rounded-lg border-2 border-ink transition-transform hover:-translate-y-0.5 ${sameHex(value, c) ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
+                style={{ background: c }}
+                aria-label={`Pick ${c}`}
+              />
+            ))}
+          </div>
+
+          <div className="mt-3 pt-3 border-t-2 border-dashed border-ink/20">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink/60 mb-1.5">Custom</div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openNative}
+                className={`relative w-10 h-10 rounded-lg border-2 border-ink overflow-hidden shrink-0 transition-transform hover:-translate-y-0.5 ${isCustom ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
+                style={isCustom ? { background: value } : { background: 'conic-gradient(from 90deg, #FF4FA3, #FFD93D, #5EE2C1, #4D7CFF, #9B6DFF, #FF4FA3)' }}
+                title="Pick any color"
+                aria-label="Pick any color"
+              >
+                {!isCustom && (
+                  <span className="absolute inset-0 grid place-items-center text-white font-display font-bold">+</span>
+                )}
+              </button>
+              <input
+                ref={customRef}
+                type="color"
+                value={isCustom ? value : '#FF4FA3'}
+                onChange={onNativeChange}
+                onFocus={() => setPickingCustom(true)}
+                onBlur={() => setPickingCustom(false)}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+              />
+              <input
+                type="text"
+                value={hexDraft}
+                onChange={e => setHexDraft(e.target.value)}
+                onBlur={e => commitHex(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                placeholder="#RRGGBB"
+                spellCheck={false}
+                className="flex-1 min-w-0 px-2 py-1.5 rounded-lg border-2 border-ink bg-white font-mono text-xs uppercase tracking-wider outline-none focus:shadow-chunk-sm focus:-translate-y-0.5 transition"
+                aria-label="Hex color"
+              />
+            </div>
+          </div>
         </motion.div>
       )}
     </div>

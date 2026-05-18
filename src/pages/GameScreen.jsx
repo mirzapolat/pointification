@@ -19,7 +19,7 @@ export default function GameScreen() {
 
   const load = async () => {
     const [{ data: g }, { data: t }] = await Promise.all([
-      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement').eq('id', id).single(),
+      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement, logo_shape, logo_scale').eq('id', id).single(),
       supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position')
     ])
     setGame(g ?? null)
@@ -136,7 +136,7 @@ export default function GameScreen() {
             compact={showCenter}
           />
         ))}
-        {showCenter && <LogoCenterBadge src={logoSrc} />}
+        {showCenter && <LogoCenterBadge src={logoSrc} shape={game.logo_shape} scale={game.logo_scale} />}
       </div>
 
       <AnimatePresence>
@@ -200,16 +200,23 @@ function TeamRow({ team, index, flashKey, onClick, compact }) {
   )
 }
 
-export function LogoCenterBadge({ src }) {
+export function LogoCenterBadge({ src, shape = 'circle', scale = 0.8 }) {
+  const pct = Math.max(40, Math.min(160, Math.round(scale * 100)))
+  const radius = shape === 'square' ? 'rounded-3xl' : 'rounded-full'
   return (
     <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
       <motion.div
         initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 180, damping: 16 }}
-        className="rounded-full border-2 border-ink bg-white shadow-chunk grid place-items-center overflow-hidden w-40 h-40 sm:w-52 sm:h-52 md:w-64 md:h-64 lg:w-72 lg:h-72"
+        className={`${radius} border-2 border-ink bg-white shadow-chunk grid place-items-center overflow-hidden w-40 h-40 sm:w-52 sm:h-52 md:w-64 md:h-64 lg:w-72 lg:h-72`}
       >
-        <img src={src} alt="Game logo" className="w-[80%] h-[80%] object-contain" />
+        <img
+          src={src}
+          alt="Game logo"
+          className="object-contain"
+          style={{ width: `${pct}%`, height: `${pct}%` }}
+        />
       </motion.div>
     </div>
   )

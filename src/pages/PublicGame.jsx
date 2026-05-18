@@ -17,7 +17,7 @@ export default function PublicGame() {
     ;(async () => {
       const { data: g } = await supabase
         .from('games')
-        .select('id, name, public_token, is_public, logo_path, logo_placement')
+        .select('id, name, public_token, is_public, logo_path, logo_placement, logo_shape, logo_scale')
         .eq('public_token', token)
         .eq('is_public', true)
         .maybeSingle()
@@ -114,7 +114,7 @@ export default function PublicGame() {
           : teams.map((t, i) => (
               <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} compact={showCenter} />
             ))}
-        {showCenter && <LogoCenterBadge src={logoSrc} />}
+        {showCenter && <LogoCenterBadge src={logoSrc} shape={game.logo_shape} scale={game.logo_scale} />}
       </div>
     </motion.div>
   )
