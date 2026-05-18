@@ -299,6 +299,20 @@ function DangerCard({ onDeleted }) {
     })
     if (!ok) return
     setBusy(true)
+    // Best-effort: wipe this user's logo folder before deleting the account.
+    // Storage RLS scopes objects under {user_id}/, so we can list and remove
+    // by user id alone.
+    try {
+      if (user?.id) {
+        const { data: gameFolders } = await supabase.storage.from('game-logos').list(user.id, { limit: 1000 })
+        const paths = []
+        for (const folder of gameFolders ?? []) {
+          const { data: files } = await supabase.storage.from('game-logos').list(`${user.id}/${folder.name}`, { limit: 100 })
+          for (const f of files ?? []) paths.push(`${user.id}/${folder.name}/${f.name}`)
+        }
+        if (paths.length) await supabase.storage.from('game-logos').remove(paths)
+      }
+    } catch {/* don't block account deletion on storage cleanup */}
     const { error } = await supabase.rpc('delete_my_account')
     setBusy(false)
     if (error) setErr(error.message)

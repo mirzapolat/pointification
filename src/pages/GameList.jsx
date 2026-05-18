@@ -25,7 +25,7 @@ export default function GameList() {
   const load = async () => {
     const { data, error } = await supabase
       .from('games')
-      .select('id, name, user_id, is_public, public_token, archived_at, created_at, updated_at, logo_path, logo_placement, teams (id, name, color)')
+      .select('id, name, user_id, is_public, public_token, archived_at, created_at, updated_at, logo_path, logo_placement, logo_shape, logo_scale, teams (id, name, color)')
       .order('updated_at', { ascending: false })
     if (!error) setGames(data ?? [])
     setLoading(false)
@@ -68,6 +68,16 @@ export default function GameList() {
       tone: 'danger',
     })
     if (!ok) return
+    // Best-effort: clean up any logo objects sitting at {user_id}/{game_id}/* before
+    // the row goes away (storage RLS requires the game to still exist for the
+    // ownership check, so do it first).
+    if (user?.id) {
+      const prefix = `${user.id}/${game.id}`
+      const { data: files } = await supabase.storage.from('game-logos').list(prefix, { limit: 100 })
+      if (files?.length) {
+        await supabase.storage.from('game-logos').remove(files.map(f => `${prefix}/${f.name}`))
+      }
+    }
     const { error } = await supabase.from('games').delete().eq('id', game.id)
     if (error) await dialogs.alert({ title: 'Could not delete', message: error.message })
   }

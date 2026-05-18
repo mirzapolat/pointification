@@ -156,10 +156,13 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     if (instant) await patchGame({ logo_shape: s })
   }
 
-  const handleLogoScale = async (v) => {
+  const scaleCommitRef = useRef(null)
+  const handleLogoScale = (v) => {
     const next = Math.max(0.4, Math.min(1.6, Math.round(v * 100) / 100))
     setLogoScale(next)
-    if (instant) await patchGame({ logo_scale: next })
+    if (!instant) return
+    if (scaleCommitRef.current) clearTimeout(scaleCommitRef.current)
+    scaleCommitRef.current = setTimeout(() => { patchGame({ logo_scale: next }) }, 250)
   }
 
   const handleLogoClear = async () => {
@@ -891,9 +894,11 @@ function ColorPicker({ value, onChange }) {
   const customRef = useRef(null)
   const [pickingCustom, setPickingCustom] = useState(false)
   const [hexDraft, setHexDraft] = useState(value ?? '')
+  const [draftColor, setDraftColor] = useState(null)
 
   const sameHex = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase()
-  const isCustom = !!value && !TEAM_PALETTE.some(c => sameHex(c, value))
+  const effective = draftColor ?? value
+  const isCustom = !!effective && !TEAM_PALETTE.some(c => sameHex(c, effective))
 
   useEffect(() => { setHexDraft(value ?? '') }, [value])
 
@@ -920,8 +925,17 @@ function ColorPicker({ value, onChange }) {
     setTimeout(() => setPickingCustom(false), 400)
   }
 
-  const onNativeChange = (e) => {
-    onChange(e.target.value)
+  // While the native dialog is open, just preview locally so we don't fire
+  // a Supabase update for every micro-change. Commit once on blur (dialog close).
+  const onNativeInput = (e) => {
+    setDraftColor(e.target.value)
+  }
+  const onNativeCommit = () => {
+    setPickingCustom(false)
+    if (draftColor && !sameHex(draftColor, value)) {
+      onChange(draftColor)
+    }
+    setDraftColor(null)
   }
 
   const commitHex = (raw) => {
@@ -967,7 +981,7 @@ function ColorPicker({ value, onChange }) {
                 type="button"
                 onClick={openNative}
                 className={`relative w-10 h-10 rounded-lg border-2 border-ink overflow-hidden shrink-0 transition-transform hover:-translate-y-0.5 ${isCustom ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
-                style={isCustom ? { background: value } : { background: 'conic-gradient(from 90deg, #FF4FA3, #FFD93D, #5EE2C1, #4D7CFF, #9B6DFF, #FF4FA3)' }}
+                style={isCustom ? { background: effective } : { background: 'conic-gradient(from 90deg, #FF4FA3, #FFD93D, #5EE2C1, #4D7CFF, #9B6DFF, #FF4FA3)' }}
                 title="Pick any color"
                 aria-label="Pick any color"
               >
@@ -978,10 +992,10 @@ function ColorPicker({ value, onChange }) {
               <input
                 ref={customRef}
                 type="color"
-                value={isCustom ? value : '#FF4FA3'}
-                onChange={onNativeChange}
+                defaultValue={isCustom ? effective : '#FF4FA3'}
+                onChange={onNativeInput}
+                onBlur={onNativeCommit}
                 onFocus={() => setPickingCustom(true)}
-                onBlur={() => setPickingCustom(false)}
                 className="sr-only"
                 tabIndex={-1}
                 aria-hidden
