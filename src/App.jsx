@@ -1,6 +1,9 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import Login from './pages/Login.jsx'
+import Verify from './pages/Verify.jsx'
+import Welcome from './pages/Welcome.jsx'
+import Onboarding from './pages/Onboarding.jsx'
 import GameList from './pages/GameList.jsx'
 import GameScreen from './pages/GameScreen.jsx'
 import Account from './pages/Account.jsx'
@@ -11,17 +14,42 @@ import Privacy from './pages/Privacy.jsx'
 import Landing from './pages/Landing.jsx'
 import { DialogProvider } from './components/Dialogs.jsx'
 
-function Protected({ children }) {
-  const { session, loading } = useAuth()
+function needsWelcome(details) {
+  return !details || !details.details_completed_at
+}
+function needsOnboarding(details) {
+  return !details || !details.onboarding_completed_at
+}
+
+function Protected({ children, allow = 'app' }) {
+  const { session, loading, details, detailsLoading } = useAuth()
+  const loc = useLocation()
   if (loading) return <Splash />
   if (!session) return <Navigate to="/login" replace />
+  if (detailsLoading && !details) return <Splash />
+
+  // Gate: force the new user through welcome → onboarding before reaching the app.
+  if (allow === 'app') {
+    if (needsWelcome(details)) return <Navigate to="/welcome" replace state={{ from: loc.pathname }} />
+    if (needsOnboarding(details)) return <Navigate to="/onboarding" replace state={{ from: loc.pathname }} />
+  } else if (allow === 'welcome') {
+    if (!needsWelcome(details) && needsOnboarding(details)) return <Navigate to="/onboarding" replace />
+    if (!needsWelcome(details) && !needsOnboarding(details)) return <Navigate to="/" replace />
+  } else if (allow === 'onboarding') {
+    if (needsWelcome(details)) return <Navigate to="/welcome" replace />
+    if (!needsOnboarding(details)) return <Navigate to="/" replace />
+  }
   return children
 }
 
 function Home() {
-  const { session, loading } = useAuth()
+  const { session, loading, details, detailsLoading } = useAuth()
   if (loading) return <Splash />
-  return session ? <GameList /> : <Landing />
+  if (!session) return <Landing />
+  if (detailsLoading && !details) return <Splash />
+  if (needsWelcome(details)) return <Navigate to="/welcome" replace />
+  if (needsOnboarding(details)) return <Navigate to="/onboarding" replace />
+  return <GameList />
 }
 
 function Splash() {
@@ -37,6 +65,9 @@ export default function App() {
     <DialogProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/verify" element={<Verify />} />
+        <Route path="/welcome" element={<Protected allow="welcome"><Welcome /></Protected>} />
+        <Route path="/onboarding" element={<Protected allow="onboarding"><Onboarding /></Protected>} />
         <Route path="/imprint" element={<Imprint />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/p/:token" element={<PublicGame />} />

@@ -21,6 +21,7 @@ export default function Account() {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 md:px-10 py-10 space-y-6">
+        <NameCard />
         <EmailCard currentEmail={user?.email} />
         <PasswordCard />
         <PrivacyCard />
@@ -53,6 +54,67 @@ function Banner({ kind, children }) {
       initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
       className={`mt-3 px-3 py-2 rounded-xl border-2 border-ink text-sm ${bg}`}
     >{children}</motion.div>
+  )
+}
+
+function NameCard() {
+  const { user } = useAuth()
+  const [name, setName] = useState('')
+  const [original, setOriginal] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('profiles')
+        .select('display_name').eq('id', user.id).maybeSingle()
+      if (cancelled) return
+      const v = data?.display_name ?? user.user_metadata?.display_name ?? ''
+      setName(v)
+      setOriginal(v)
+      setLoaded(true)
+    })()
+    return () => { cancelled = true }
+  }, [user.id])
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setErr(null); setMsg(null)
+    const next = name.trim()
+    if (!next) return setErr('Name can\'t be empty.')
+    if (next === original) return setErr('Pick a different name.')
+
+    setBusy(true)
+    const { error: metaErr } = await supabase.auth.updateUser({ data: { display_name: next } })
+    if (metaErr) { setBusy(false); return setErr(metaErr.message) }
+    const { error: profErr } = await supabase.from('profiles')
+      .update({ display_name: next }).eq('id', user.id)
+    setBusy(false)
+    if (profErr) return setErr(profErr.message)
+    setOriginal(next)
+    setMsg('Name updated.')
+  }
+
+  return (
+    <Section title="Name" accent="#5EE2C1">
+      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="text" required
+          value={name} onChange={e => setName(e.target.value)}
+          disabled={!loaded}
+          placeholder="your name"
+          className="input-chunk flex-1"
+        />
+        <button disabled={busy || !loaded} className="btn-chunk bg-candy-mint disabled:opacity-60">
+          {busy ? 'Updating…' : 'Update name'}
+        </button>
+      </form>
+      <Banner kind="error">{err}</Banner>
+      <Banner kind="ok">{msg}</Banner>
+    </Section>
   )
 }
 

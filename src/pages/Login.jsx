@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
 
 export default function Login() {
   const { signIn, signUp, session } = useAuth()
   const nav = useNavigate()
   const [mode, setMode] = useState('signin')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [repeat, setRepeat] = useState('')
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -16,20 +18,30 @@ export default function Login() {
 
   const submit = async (e) => {
     e.preventDefault()
-    setErr(null); setBusy(true)
-    const fn = mode === 'signin' ? signIn : signUp
-    const { error } = await fn(email, password)
-    setBusy(false)
-    if (error) setErr(error.message)
-    else if (mode === 'signup') setErr('Account created. Check your inbox if confirmation is required, then sign in.')
+    setErr(null)
+    if (mode === 'signup') {
+      if (!name.trim()) return setErr('What should we call you?')
+      if (password.length < 6) return setErr('Password must be at least 6 characters.')
+      if (password !== repeat) return setErr('Passwords don\'t match.')
+    }
+    setBusy(true)
+    if (mode === 'signin') {
+      const { error } = await signIn(email, password)
+      setBusy(false)
+      if (error) setErr(error.message)
+    } else {
+      const { error } = await signUp(email, password, name)
+      setBusy(false)
+      if (error) return setErr(error.message)
+      nav('/verify', { state: { email, name } })
+    }
   }
 
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="h-full bg-cream bg-dots relative overflow-hidden flex flex-col items-center justify-center px-4"
+      className="h-full bg-cream bg-dots relative overflow-hidden flex flex-col items-center justify-center px-4 py-8"
     >
-      {/* floating shapes */}
       <Blobs />
 
       <motion.div
@@ -61,6 +73,19 @@ export default function Login() {
         </div>
 
         <form onSubmit={submit} className="space-y-3">
+          <AnimatePresence initial={false}>
+            {mode === 'signup' && (
+              <motion.input
+                key="name"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                type="text" required placeholder="your name"
+                value={name} onChange={e => setName(e.target.value)}
+                className="input-chunk"
+              />
+            )}
+          </AnimatePresence>
           <input
             type="email" required placeholder="you@example.com"
             value={email} onChange={e => setEmail(e.target.value)}
@@ -71,6 +96,19 @@ export default function Login() {
             value={password} onChange={e => setPassword(e.target.value)}
             className="input-chunk"
           />
+          <AnimatePresence initial={false}>
+            {mode === 'signup' && (
+              <motion.input
+                key="repeat"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                type="password" required minLength={6} placeholder="repeat password"
+                value={repeat} onChange={e => setRepeat(e.target.value)}
+                className="input-chunk"
+              />
+            )}
+          </AnimatePresence>
           {err && (
             <motion.div
               initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}

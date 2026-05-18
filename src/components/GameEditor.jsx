@@ -332,7 +332,7 @@ function MembersSection({ gameId }) {
 
   const load = async () => {
     const { data: mems } = await supabase.from('game_members')
-      .select('user_id, created_at, profiles:user_id (email)')
+      .select('user_id, created_at, profiles:game_members_user_id_profiles_fkey (email, display_name)')
       .eq('game_id', gameId)
       .order('created_at')
     setMembers(mems ?? [])
@@ -381,25 +381,34 @@ function MembersSection({ gameId }) {
           </div>
         ) : (
           <AnimatePresence initial={false}>
-            {members.map(m => (
-              <motion.div
-                key={m.user_id}
-                layout
-                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
-                className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white"
-              >
-                <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-mint grid place-items-center font-bold">
-                  {(m.profiles?.email ?? '?')[0]?.toUpperCase()}
-                </div>
-                <div className="flex-1 truncate">
-                  <div className="font-semibold truncate">{m.profiles?.email ?? '…'}</div>
-                </div>
-                <button
-                  onClick={() => remove(m.user_id, m.profiles?.email)}
-                  className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
-                >Remove</button>
-              </motion.div>
-            ))}
+            {members.map(m => {
+              const name = m.profiles?.display_name?.trim()
+              const email = m.profiles?.email
+              const primary = name || email || '…'
+              const initial = (name || email || '?')[0]?.toUpperCase()
+              return (
+                <motion.div
+                  key={m.user_id}
+                  layout
+                  initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
+                  className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white"
+                >
+                  <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-mint grid place-items-center font-bold">
+                    {initial}
+                  </div>
+                  <div className="flex-1 truncate">
+                    <div className="font-semibold truncate">{primary}</div>
+                    {name && email && (
+                      <div className="text-xs text-ink/60 truncate">{email}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => remove(m.user_id, primary)}
+                    className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
+                  >Remove</button>
+                </motion.div>
+              )
+            })}
           </AnimatePresence>
         )}
       </div>

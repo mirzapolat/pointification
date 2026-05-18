@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
@@ -7,13 +7,20 @@ import GameEditor from '../components/GameEditor.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
 
+const FILTERS = [
+  { id: 'all',      label: 'All',             icon: AllIcon,      accent: '#FFD93D' },
+  { id: 'mine',     label: 'My games',        icon: CrownIcon,    accent: '#5EE2C1' },
+  { id: 'shared',   label: 'Shared with me',  icon: PeopleIcon,   accent: '#4D7CFF' },
+  { id: 'archive',  label: 'Archive',         icon: ArchiveIcon,  accent: '#9B6DFF' },
+]
+
 export default function GameList() {
   const { user, signOut } = useAuth()
   const dialogs = useDialogs()
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
-  const [showArchived, setShowArchived] = useState(false)
+  const [filter, setFilter] = useState('all')
 
   const load = async () => {
     const { data, error } = await supabase
@@ -26,7 +33,6 @@ export default function GameList() {
 
   useEffect(() => { load() }, [])
 
-  // Realtime: anything affecting which games we see/care about → reload.
   useEffect(() => {
     const channel = supabase.channel('games-list')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },        load)
@@ -87,6 +93,33 @@ export default function GameList() {
     setGames(gs => gs.filter(x => x.id !== game.id))
   }
 
+  const counts = useMemo(() => {
+    const c = { all: 0, mine: 0, shared: 0, archive: 0 }
+    for (const g of games) {
+      const isOwner = g.user_id === user?.id
+      if (g.archived_at) { c.archive += 1; continue }
+      c.all += 1
+      if (isOwner) c.mine += 1
+      else c.shared += 1
+    }
+    return c
+  }, [games, user?.id])
+
+  const visible = useMemo(() => {
+    return games.filter(g => {
+      const isOwner = g.user_id === user?.id
+      switch (filter) {
+        case 'mine':    return !g.archived_at && isOwner
+        case 'shared':  return !g.archived_at && !isOwner
+        case 'archive': return !!g.archived_at
+        case 'all':
+        default:        return !g.archived_at
+      }
+    })
+  }, [games, filter, user?.id])
+
+  const allowCreate = filter === 'all' || filter === 'mine'
+
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -122,79 +155,51 @@ export default function GameList() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 md:px-10 py-6 md:py-10">
-        {loading ? (
-          <SkeletonGrid />
-        ) : games.length === 0 ? (
-          <EmptyState onCreate={() => setEditing('new')} />
-        ) : (() => {
-          const active = games.filter(g => !g.archived_at)
-          const archived = games.filter(g => g.archived_at)
-          return (
-            <>
-              <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                <AnimatePresence>
-                  {active.map((g, i) => {
-                    const isOwner = g.user_id === user?.id
-                    return (
-                      <GameCard
-                        key={g.id}
-                        game={g}
-                        i={i}
-                        isOwner={isOwner}
-                        onEdit={() => setEditing(g)}
-                        onArchive={isOwner ? () => archive(g) : null}
-                        onDelete={() => isOwner ? remove(g) : leave(g)}
-                      />
-                    )
-                  })}
-                  <NewGameCard key="__new" i={active.length} onCreate={() => setEditing('new')} />
-                </AnimatePresence>
-              </motion.div>
+      <div className="max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 flex flex-col md:flex-row gap-6 md:gap-8">
+        <Sidebar
+          filter={filter}
+          onChange={setFilter}
+          counts={counts}
+        />
 
-              {archived.length > 0 && (
-                <div className="mt-10">
-                  <button
-                    onClick={() => setShowArchived(s => !s)}
-                    className="flex items-center gap-2 font-display font-semibold text-ink/60 hover:text-ink transition mb-4"
-                  >
-                    <span className={`inline-block transition-transform ${showArchived ? 'rotate-90' : ''}`}>▶</span>
-                    Archived ({archived.length})
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {showArchived && (
-                      <motion.div
-                        key="archived-grid"
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-1 pb-2">
-                          {archived.map((g, i) => {
-                            const isOwner = g.user_id === user?.id
-                            return (
-                              <GameCard
-                                key={g.id}
-                                game={g}
-                                i={i}
-                                isOwner={isOwner}
-                                onEdit={() => setEditing(g)}
-                                onArchive={isOwner ? () => archive(g) : null}
-                                onDelete={() => isOwner ? remove(g) : leave(g)}
-                              />
-                            )
-                          })}
-                        </motion.div>
-                      </motion.div>
+        <main className="flex-1 min-w-0">
+          {loading ? (
+            <SkeletonGrid />
+          ) : (
+            <>
+              <FilterHeader filter={filter} count={visible.length} />
+
+              {visible.length === 0 && !allowCreate ? (
+                <EmptyForFilter filter={filter} />
+              ) : visible.length === 0 && allowCreate ? (
+                <EmptyState filter={filter} onCreate={() => setEditing('new')} />
+              ) : (
+                <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <AnimatePresence mode="popLayout">
+                    {visible.map((g, i) => {
+                      const isOwner = g.user_id === user?.id
+                      return (
+                        <GameCard
+                          key={g.id}
+                          game={g}
+                          i={i}
+                          isOwner={isOwner}
+                          onEdit={() => setEditing(g)}
+                          onArchive={isOwner ? () => archive(g) : null}
+                          onDelete={() => isOwner ? remove(g) : leave(g)}
+                        />
+                      )
+                    })}
+                    {allowCreate && (
+                      <NewGameCard key="__new" i={visible.length} onCreate={() => setEditing('new')} />
                     )}
                   </AnimatePresence>
-                </div>
+                </motion.div>
               )}
             </>
-          )
-        })()}
-      </main>
+          )}
+        </main>
+      </div>
 
       <AnimatePresence>
         {editing && (
@@ -205,6 +210,126 @@ export default function GameList() {
           />
         )}
       </AnimatePresence>
+    </motion.div>
+  )
+}
+
+function Sidebar({ filter, onChange, counts }) {
+  return (
+    <>
+      {/* Mobile: horizontal scrollable pills */}
+      <nav className="md:hidden -mx-4 px-4 overflow-x-auto no-scrollbar">
+        <div className="flex gap-2 pb-2 w-max">
+          {FILTERS.map(f => {
+            const active = f.id === filter
+            const Icon = f.icon
+            return (
+              <button
+                key={f.id}
+                onClick={() => onChange(f.id)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 border-ink font-display font-semibold text-sm transition shadow-chunk-sm ${
+                  active ? 'bg-ink text-cream' : 'bg-white hover:bg-candy-yellow'
+                }`}
+              >
+                <span
+                  className={`w-6 h-6 rounded-lg border-2 border-ink grid place-items-center ${active ? 'bg-cream text-ink' : ''}`}
+                  style={!active ? { background: f.accent } : undefined}
+                >
+                  <Icon />
+                </span>
+                <span>{f.label}</span>
+                <span className={`min-w-[22px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink ${active ? 'bg-cream text-ink' : 'bg-cream'}`}>
+                  {counts[f.id]}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+
+      {/* Desktop: sticky sidebar card */}
+      <aside className="hidden md:block w-56 shrink-0">
+        <div className="card-chunk overflow-hidden sticky top-28">
+          <div className="px-4 py-3 border-b-2 border-ink bg-cream">
+            <h2 className="font-display font-bold text-lg leading-none">Filter</h2>
+          </div>
+          <ul className="p-2 space-y-1">
+            {FILTERS.map(f => {
+              const active = f.id === filter
+              const Icon = f.icon
+              return (
+                <li key={f.id}>
+                  <button
+                    onClick={() => onChange(f.id)}
+                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border-2 font-display font-semibold transition relative ${
+                      active
+                        ? 'border-ink bg-ink text-cream shadow-chunk-sm'
+                        : 'border-transparent hover:border-ink hover:bg-cream'
+                    }`}
+                  >
+                    <span
+                      className={`w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0 ${active ? 'bg-cream text-ink' : ''}`}
+                      style={!active ? { background: f.accent } : undefined}
+                    >
+                      <Icon />
+                    </span>
+                    <span className="flex-1 text-left truncate">{f.label}</span>
+                    <span
+                      className={`min-w-[26px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink ${
+                        active ? 'bg-cream text-ink' : 'bg-cream'
+                      }`}
+                    >
+                      {counts[f.id]}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </aside>
+    </>
+  )
+}
+
+function FilterHeader({ filter, count }) {
+  const f = FILTERS.find(x => x.id === filter)
+  if (!f) return null
+  const label = f.id === 'all' ? 'Your games' : f.label
+  return (
+    <motion.div
+      key={filter}
+      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+      className="flex items-baseline gap-3 mb-4"
+    >
+      <h2 className="font-display font-bold text-2xl md:text-3xl leading-none">{label}</h2>
+      <span className="text-ink/50 font-semibold">{count}</span>
+    </motion.div>
+  )
+}
+
+function EmptyForFilter({ filter }) {
+  const map = {
+    shared: {
+      emoji: '🤝',
+      title: 'No shared games yet',
+      body: 'When someone invites you to a game, it shows up here.',
+    },
+    archive: {
+      emoji: '📦',
+      title: 'Nothing archived',
+      body: 'Archive a game from its menu and it lands here, safe and out of the way.',
+    },
+  }
+  const s = map[filter] ?? map.shared
+  return (
+    <motion.div
+      initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+      className="card-chunk p-10 md:p-12 text-center"
+    >
+      <div className="text-5xl md:text-6xl mb-3">{s.emoji}</div>
+      <h3 className="font-display text-2xl md:text-3xl font-bold">{s.title}</h3>
+      <p className="text-ink/60 mt-2 max-w-sm mx-auto">{s.body}</p>
     </motion.div>
   )
 }
@@ -308,14 +433,15 @@ function NewGameCard({ i, onCreate }) {
   )
 }
 
-function EmptyState({ onCreate }) {
+function EmptyState({ filter, onCreate }) {
+  const title = filter === 'mine' ? "You don't own any games yet" : 'No games yet'
   return (
     <motion.div
       initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
       className="card-chunk p-12 text-center"
     >
       <div className="text-6xl mb-3">🎲</div>
-      <h3 className="font-display text-3xl font-bold">No games yet</h3>
+      <h3 className="font-display text-3xl font-bold">{title}</h3>
       <p className="text-ink/60 mt-2 mb-6">Create your first game and start racking up points.</p>
       <button onClick={onCreate} className="btn-chunk bg-candy-pink text-white text-lg">+ New game</button>
     </motion.div>
@@ -329,5 +455,45 @@ function SkeletonGrid() {
         <div key={i} className="card-chunk h-64 animate-pulse" />
       ))}
     </div>
+  )
+}
+
+/* --- icons --- */
+
+function AllIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  )
+}
+function CrownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 18h18" />
+      <path d="M3 7l5 4 4-7 4 7 5-4-2 11H5L3 7z" />
+    </svg>
+  )
+}
+function PeopleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path d="M15 20a5 5 0 0 1 7 0" />
+    </svg>
+  )
+}
+function ArchiveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="5" rx="1.5" />
+      <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" />
+      <path d="M10 13h4" />
+    </svg>
   )
 }
