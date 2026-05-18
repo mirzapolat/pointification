@@ -1,0 +1,146 @@
+POINTIFICATION — PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 Mirza Polat. All rights reserved.
+
+This software and its associated source code, design assets, documentation,
+database schemas, configuration, and all other materials contained in this
+repository (collectively, the "Software") are the exclusive property of
+Mirza Polat (the "Author") and are protected by copyright law and
+international treaties.
+
+Notwithstanding the public visibility of this repository, NO LICENSE,
+EXPRESS OR IMPLIED, IS GRANTED TO ANY PERSON OR ENTITY UNDER THIS LICENSE,
+except for the strictly limited permissions stated below.
+
+1. RESERVATION OF RIGHTS
+   All rights not expressly granted herein are reserved by the Author. The
+   making available of this repository for viewing does not constitute a
+   waiver of any right, nor does it grant any license under any patent,
+   trademark, trade secret, or other intellectual property right of the
+   Author.
+
+2. PERMITTED USE (NON-LICENSE)
+   You may view the contents of this repository through publicly accessible
+   interfaces provided by the hosting platform solely for the purpose of
+   evaluation and personal informational reading. This permission is a
+   bare permission and may be revoked at any time, for any reason, without
+   notice.
+
+3. PROHIBITED ACTS
+   Without prior, express, written permission from the Author, you MAY NOT,
+   in whole or in part:
+
+   (a) copy, clone, download, fork, mirror, or otherwise reproduce the
+       Software or any portion thereof, except for the transient copies
+       made by a web browser solely to display the repository contents;
+   (b) use, execute, run, deploy, host, install, or operate the Software,
+       in original or modified form, for any purpose whatsoever — including
+       personal, educational, research, evaluation, demonstration,
+       internal, non-commercial, or commercial use;
+   (c) modify, translate, adapt, port, refactor, fine-tune, derive, or
+       create any derivative work based on the Software;
+   (d) distribute, publish, sublicense, sell, rent, lease, lend, transfer,
+       broadcast, transmit, communicate, or otherwise make available the
+       Software or any derivative work to any third party, by any means,
+       including via source-code repositories, package registries, CDNs,
+       application stores, or peer-to-peer networks;
+   (e) reverse engineer, decompile, disassemble, extract, or attempt to
+       discover the underlying ideas, algorithms, file formats, or
+       interfaces of the Software, except to the limited extent
+       expressly required by mandatory applicable law and only after
+       written notice to the Author;
+   (f) remove, alter, conceal, or obscure any copyright, trademark, or
+       other proprietary notices contained in the Software;
+   (g) use the name "Pointification", any associated logos, marks, trade
+       dress, look-and-feel, or distinctive visual identity of the
+       Software for any purpose;
+   (h) train, fine-tune, evaluate, benchmark, or otherwise incorporate the
+       Software, in whole or in part, into any machine-learning or
+       artificial-intelligence model, dataset, embedding, index, or
+       similar system, whether for commercial or non-commercial use;
+   (i) use the Software, in whole or in part, as the basis for any
+       competing product, service, or offering;
+   (j) circumvent, disable, or otherwise interfere with any security,
+       licensing, or access-control feature of the Software.
+
+4. NO TRANSFER OR ASSIGNMENT
+   Any rights, permissions, or interests you may otherwise believe yourself
+   to hold in or to the Software are personal to you and may not be
+   assigned, sublicensed, or transferred. Any attempt to do so is void.
+
+5. CONTRIBUTIONS
+   By submitting any contribution, suggestion, issue, comment, pull
+   request, patch, or other material (a "Submission") to the Author or to
+   this repository, you irrevocably assign to the Author all right, title,
+   and interest, including all copyright and related rights, in and to
+   such Submission, worldwide, in perpetuity, with no obligation of
+   compensation, attribution, or further notice.
+
+6. THIRD-PARTY DEPENDENCIES
+   The Software references and depends on third-party packages (e.g.,
+   listed in package.json and used at runtime). Each such dependency is
+   licensed under its own respective terms, which prevail over this
+   License with respect to that dependency alone. Nothing in this License
+   grants any rights to the Author's own code by virtue of those
+   third-party licenses.
+
+7. TERMINATION
+   Any permission set forth in Section 2 terminates automatically and
+   immediately upon any breach of this License by you, without notice.
+   Upon termination, you must cease all viewing, retention, and use of
+   the Software and permanently destroy any copies, in any medium, that
+   may remain in your possession or control.
+
+8. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY
+   OF ANY KIND, EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING BUT
+   NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE, NON-INFRINGEMENT, ACCURACY, RELIABILITY, AVAILABILITY, OR
+   FREEDOM FROM DEFECTS OR HARMFUL COMPONENTS. THE ENTIRE RISK ARISING
+   OUT OF VIEWING OR INTERACTING WITH THE SOFTWARE REMAINS WITH YOU.
+
+9. LIMITATION OF LIABILITY
+   TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+   THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+   EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+   LIMITED TO, LOSS OF PROFITS, REVENUE, DATA, GOODWILL, USE, OR OTHER
+   ECONOMIC ADVANTAGE), HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+   WHETHER IN CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, OR OTHERWISE,
+   ARISING IN ANY WAY OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THIS
+   LICENSE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+10. INJUNCTIVE RELIEF
+    You acknowledge that any breach of this License will cause the Author
+    irreparable harm for which monetary damages would be inadequate, and
+    that the Author shall be entitled to seek immediate injunctive and
+    other equitable relief, in addition to any other available remedies,
+    without the requirement to post a bond.
+
+11. GOVERNING LAW AND VENUE
+    This License shall be governed by and construed in accordance with the
+    laws of the Federal Republic of Germany, without regard to its
+    conflict-of-laws principles. Any dispute, claim, or controversy
+    arising out of or relating to this License shall be subject to the
+    exclusive jurisdiction of the courts located in Germany.
+
+12. SEVERABILITY
+    If any provision of this License is held to be unenforceable or
+    invalid, that provision shall be enforced to the maximum extent
+    permissible, and the remaining provisions shall remain in full force
+    and effect.
+
+13. ENTIRE AGREEMENT
+    This License constitutes the entire agreement between you and the
+    Author concerning its subject matter and supersedes any prior or
+    contemporaneous understandings, whether written or oral.
+
+14. CONTACT FOR LICENSING REQUESTS
+    For any request for permission beyond the scope of this License —
+    including, but not limited to, evaluation deployments, internal use,
+    forks, redistribution, or commercial licensing — contact the Author
+    in writing prior to undertaking any such activity. The Author is
+    under no obligation to grant any request.
+
+PROCEEDING TO VIEW, READ, COPY, EXECUTE, OR OTHERWISE INTERACT WITH THIS
+SOFTWARE IN ANY MANNER NOT EXPRESSLY PERMITTED HEREIN CONSTITUTES YOUR
+AGREEMENT TO BE BOUND BY THIS LICENSE.

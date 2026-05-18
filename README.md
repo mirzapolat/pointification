@@ -42,3 +42,11 @@ supabase db push
 ```
 
 …or paste the migrations under `supabase/migrations/` into the SQL editor by hand.
+
+# License
+
+**Pointification is proprietary software.** All rights reserved by the author.
+
+This repository is public for viewing only. You **may not** copy, fork, run, deploy, modify, redistribute, or build derivative works from this code — in whole or in part, commercial or non-commercial — without prior written permission from the author. See [LICENSE](LICENSE) for the full terms.
+
+If you'd like to use, license, or collaborate on Pointification, please get in touch first.
