@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
 import { useDialogs } from './Dialogs.jsx'
@@ -18,8 +18,18 @@ export default function GameEditor({ initial, onClose, onSaved }) {
       ? initial.teams.map(t => ({ ...t, _existing: true }))
       : [{ id: tmp(), name: 'Team 1', color: TEAM_PALETTE[0] }, { id: tmp(), name: 'Team 2', color: TEAM_PALETTE[1] }]
   )
+
+  // Logo state
+  const [logoPath] = useState(initial?.logo_path ?? null)
+  const [logoPlacement, setLogoPlacement] = useState(initial?.logo_placement ?? 'center')
+  const [pendingFile, setPendingFile] = useState(null)
+  const [pendingPreview, setPendingPreview] = useState(null)
+  const [removeLogo, setRemoveLogo] = useState(false)
+
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+
+  useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview) }, [pendingPreview])
 
   const addTeam = () => {
     setTeams(ts => [...ts, { id: tmp(), name: `Team ${ts.length + 1}`, color: nextColor(ts.map(t => t.color)) }])
@@ -56,6 +66,38 @@ export default function GameEditor({ initial, onClose, onSaved }) {
           const { error: e2 } = await supabase.from('games')
             .update({ allow_negative: true }).eq('id', gameId)
           if (e2) throw e2
+        }
+      }
+
+      if (isOwner) {
+        // Logo: upload new, remove existing, or just update placement.
+        let nextPath = logoPath
+        let nextPlacement = logoPath ? logoPlacement : null
+
+        if (pendingFile) {
+          const ext = (pendingFile.name.split('.').pop() || 'png').toLowerCase()
+          const safeExt = /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png'
+          const newPath = `${user.id}/${gameId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
+          const { error: upErr } = await supabase.storage
+            .from('game-logos')
+            .upload(newPath, pendingFile, { contentType: pendingFile.type, upsert: false })
+          if (upErr) throw upErr
+          if (logoPath) {
+            await supabase.storage.from('game-logos').remove([logoPath])
+          }
+          nextPath = newPath
+          nextPlacement = logoPlacement
+        } else if (removeLogo && logoPath) {
+          await supabase.storage.from('game-logos').remove([logoPath])
+          nextPath = null
+          nextPlacement = null
+        }
+
+        if (nextPath !== (initial?.logo_path ?? null) || nextPlacement !== (initial?.logo_placement ?? null)) {
+          const { error: lErr } = await supabase.from('games')
+            .update({ logo_path: nextPath, logo_placement: nextPlacement })
+            .eq('id', gameId)
+          if (lErr) throw lErr
         }
       }
 
@@ -146,6 +188,28 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             </button>
           </div>
 
+          {isOwner && (
+            <LogoSection
+              logoPath={logoPath}
+              placement={logoPlacement}
+              pendingPreview={pendingPreview}
+              removeLogo={removeLogo}
+              onFile={(file) => {
+                if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+                setPendingFile(file)
+                setPendingPreview(file ? URL.createObjectURL(file) : null)
+                setRemoveLogo(false)
+              }}
+              onPlacement={setLogoPlacement}
+              onClear={() => {
+                if (pendingPreview) URL.revokeObjectURL(pendingPreview)
+                setPendingFile(null)
+                setPendingPreview(null)
+                if (logoPath) setRemoveLogo(true)
+              }}
+            />
+          )}
+
           <label className="block text-sm font-semibold mb-2">Teams</label>
 
           <div className="space-y-2">
@@ -217,6 +281,179 @@ export default function GameEditor({ initial, onClose, onSaved }) {
         </div>
       </motion.div>
     </motion.div>
+  )
+}
+
+function LogoSection({ logoPath, placement, pendingPreview, removeLogo, onFile, onPlacement, onClear }) {
+  const fileRef = useRef(null)
+  const [localErr, setLocalErr] = useState(null)
+  const currentUrl = pendingPreview || (!removeLogo && logoPath ? logoUrl(logoPath) : null)
+  const hasLogo = !!currentUrl
+
+  const pick = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setLocalErr('That doesn\'t look like an image.'); return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLocalErr('Logo must be under 2MB.'); return
+    }
+    setLocalErr(null)
+    onFile(file)
+  }
+
+  return (
+    <div className="mb-6">
+      <label className="block text-sm font-semibold mb-1">Logo</label>
+      <p className="text-xs text-ink/60 mb-2">PNG, JPG, or SVG. Under 2MB.</p>
+
+      <div className="flex items-center gap-3 p-3 rounded-2xl border-2 border-ink bg-cream">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="w-20 h-20 rounded-xl border-2 border-ink bg-white grid place-items-center overflow-hidden shrink-0 hover:bg-candy-yellow transition"
+          aria-label={hasLogo ? 'Change logo' : 'Upload logo'}
+        >
+          {hasLogo ? (
+            <img src={currentUrl} alt="Logo preview" className="w-full h-full object-contain" />
+          ) : (
+            <div className="text-center">
+              <div className="font-display text-2xl font-bold leading-none">+</div>
+              <div className="text-[10px] text-ink/60 font-semibold mt-0.5">Upload</div>
+            </div>
+          )}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pick} />
+
+        <div className="flex-1 min-w-0">
+          {hasLogo ? (
+            <>
+              <div className="text-sm font-semibold">{pendingPreview ? 'New logo ready' : 'Logo uploaded'}</div>
+              <p className="text-xs text-ink/60">Click the preview to change it.</p>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-semibold">No logo yet</div>
+              <p className="text-xs text-ink/60">Click the box to pick one.</p>
+            </>
+          )}
+        </div>
+
+        {hasLogo && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition shrink-0"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence initial={false}>
+        {hasLogo && (
+          <motion.div
+            key="placement"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-3 pb-1">
+              <div className="text-sm font-semibold mb-2">Where to show it</div>
+              <div className="grid grid-cols-3 gap-2">
+                <PlacementOption
+                  active={placement === 'center'}
+                  onClick={() => onPlacement('center')}
+                  label="Center"
+                  hint="Bubble badge"
+                  preview={<CenterPreview />}
+                />
+                <PlacementOption
+                  active={placement === 'top'}
+                  onClick={() => onPlacement('top')}
+                  label="Top row"
+                  hint="Full width"
+                  preview={<TopPreview />}
+                />
+                <PlacementOption
+                  active={placement === 'menu'}
+                  onClick={() => onPlacement('menu')}
+                  label="Menu only"
+                  hint="Game list"
+                  preview={<MenuPreview />}
+                />
+              </div>
+              <p className="text-xs text-ink/60 mt-2">
+                The logo always appears on the game card in your list — these options control the game screen and public link.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {localErr && (
+        <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{localErr}</div>
+      )}
+    </div>
+  )
+}
+
+function PlacementOption({ active, onClick, label, hint, preview }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative rounded-2xl border-2 border-ink p-2 text-left transition ${
+        active ? 'bg-candy-mint shadow-chunk-sm -translate-y-0.5' : 'bg-white hover:bg-cream'
+      }`}
+    >
+      <div className="h-16 rounded-lg border-2 border-ink bg-cream/60 mb-2 overflow-hidden">
+        {preview}
+      </div>
+      <div className="font-display font-bold text-sm leading-tight">{label}</div>
+      <div className="text-[11px] text-ink/60 leading-tight">{hint}</div>
+      {active && (
+        <span className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-ink bg-ink text-cream grid place-items-center text-[10px] font-bold">✓</span>
+      )}
+    </button>
+  )
+}
+
+function CenterPreview() {
+  return (
+    <div className="relative w-full h-full flex flex-col">
+      <div className="flex-1 bg-candy-pink/70 border-b-2 border-ink" />
+      <div className="flex-1 bg-candy-mint/70" />
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-ink bg-white" />
+    </div>
+  )
+}
+
+function TopPreview() {
+  return (
+    <div className="w-full h-full flex flex-col">
+      <div className="h-1/3 bg-white border-b-2 border-ink grid place-items-center">
+        <div className="w-8 h-2 rounded-sm bg-ink/60" />
+      </div>
+      <div className="flex-1 bg-candy-yellow/70 border-b-2 border-ink" />
+      <div className="flex-1 bg-candy-blue/60" />
+    </div>
+  )
+}
+
+function MenuPreview() {
+  return (
+    <div className="w-full h-full grid grid-cols-2 gap-1 p-1">
+      <div className="rounded-md border-2 border-ink bg-white grid place-items-center">
+        <div className="w-3 h-3 rounded-full bg-ink/40" />
+      </div>
+      <div className="rounded-md border-2 border-ink bg-white" />
+      <div className="rounded-md border-2 border-ink bg-white" />
+      <div className="rounded-md border-2 border-ink bg-white" />
+    </div>
   )
 }
 

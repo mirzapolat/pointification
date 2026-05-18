@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { supabase, logoUrl } from '../lib/supabase'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
+import { LogoCenterBadge, LogoTopRow } from './GameScreen.jsx'
 
 export default function PublicGame() {
   const { token } = useParams()
@@ -16,7 +17,7 @@ export default function PublicGame() {
     ;(async () => {
       const { data: g } = await supabase
         .from('games')
-        .select('id, name, public_token, is_public')
+        .select('id, name, public_token, is_public, logo_path, logo_placement')
         .eq('public_token', token)
         .eq('is_public', true)
         .maybeSingle()
@@ -88,6 +89,10 @@ export default function PublicGame() {
     )
   }
 
+  const logoSrc = game?.logo_path ? logoUrl(game.logo_path) : null
+  const showCenter = !!logoSrc && game?.logo_placement === 'center'
+  const showTop = !!logoSrc && game?.logo_placement === 'top'
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 flex flex-col bg-ink">
@@ -102,24 +107,33 @@ export default function PublicGame() {
         </span>
       </header>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {showTop && <LogoTopRow src={logoSrc} />}
         {teams.length === 0
           ? <div className="flex-1 grid place-items-center text-cream/70 font-display text-xl">No teams yet.</div>
           : teams.map((t, i) => (
-              <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} />
+              <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} compact={showCenter} />
             ))}
+        {showCenter && <LogoCenterBadge src={logoSrc} />}
       </div>
     </motion.div>
   )
 }
 
-function Row({ team, index, flashKey }) {
+function Row({ team, index, flashKey, compact }) {
+  const padX = compact ? 'pl-6 pr-6 md:pl-12 md:pr-12' : 'px-6 md:px-12'
+  const nameSize = compact
+    ? 'text-2xl sm:text-3xl md:text-5xl lg:text-6xl'
+    : 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
+  const scoreSize = compact
+    ? 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
+    : 'text-4xl sm:text-5xl md:text-7xl lg:text-8xl'
   return (
     <motion.div
       initial={{ opacity: 0, x: index % 2 === 0 ? -40 : 40 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 }}
-      className="relative flex-1 min-h-0 flex items-center justify-between px-6 md:px-12 border-b-2 border-ink last:border-b-0 overflow-hidden"
+      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-b-2 border-ink last:border-b-0 overflow-hidden`}
       style={{ background: team.color }}
     >
       <AnimatePresence>
@@ -133,11 +147,11 @@ function Row({ team, index, flashKey }) {
           />
         )}
       </AnimatePresence>
-      <div className="relative z-10 flex items-center gap-3 md:gap-5 min-w-0">
+      <div className={`relative z-10 flex items-center gap-3 md:gap-5 min-w-0 ${compact ? 'pr-[20%] sm:pr-[14%] md:pr-[14%]' : ''}`}>
         <div className="w-3 md:w-4 h-12 md:h-16 rounded-full bg-ink/15" />
-        <h2 className="font-display font-bold text-3xl sm:text-4xl md:text-6xl lg:text-7xl truncate">{team.name}</h2>
+        <h2 className={`font-display font-bold truncate ${nameSize}`}>{team.name}</h2>
       </div>
-      <div className="relative z-10 font-display font-bold text-4xl sm:text-5xl md:text-7xl lg:text-8xl tabular-nums">
+      <div className={`relative z-10 font-display font-bold tabular-nums ${scoreSize}`}>
         <AnimatedNumber value={team.score} />
       </div>
     </motion.div>

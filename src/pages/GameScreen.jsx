@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { supabase, logoUrl } from '../lib/supabase'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import PointPopup from '../components/PointPopup.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
@@ -19,7 +19,7 @@ export default function GameScreen() {
 
   const load = async () => {
     const [{ data: g }, { data: t }] = await Promise.all([
-      supabase.from('games').select('id, name, allow_negative').eq('id', id).single(),
+      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement').eq('id', id).single(),
       supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position')
     ])
     setGame(g ?? null)
@@ -107,6 +107,9 @@ export default function GameScreen() {
   }
 
   const activeTeam = teams.find(t => t.id === active)
+  const logoSrc = game.logo_path ? logoUrl(game.logo_path) : null
+  const showCenter = !!logoSrc && game.logo_placement === 'center'
+  const showTop = !!logoSrc && game.logo_placement === 'top'
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -119,7 +122,8 @@ export default function GameScreen() {
       </header>
 
       {/* fill remaining */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {showTop && <LogoTopRow src={logoSrc} />}
         {teams.length === 0 ? (
           <div className="flex-1 grid place-items-center text-cream/70 font-display text-xl">No teams. Edit the game to add some.</div>
         ) : teams.map((t, i) => (
@@ -129,8 +133,10 @@ export default function GameScreen() {
             index={i}
             flashKey={flash[t.id] ?? 0}
             onClick={() => setActive(t.id)}
+            compact={showCenter}
           />
         ))}
+        {showCenter && <LogoCenterBadge src={logoSrc} />}
       </div>
 
       <AnimatePresence>
@@ -147,7 +153,18 @@ export default function GameScreen() {
   )
 }
 
-function TeamRow({ team, index, flashKey, onClick }) {
+function TeamRow({ team, index, flashKey, onClick, compact }) {
+  // In compact mode, leave a clear gutter around the centered logo so the
+  // big team name / score don't slide under the bubble.
+  const padX = compact
+    ? 'pl-6 pr-6 md:pl-12 md:pr-12'
+    : 'px-6 md:px-12'
+  const nameSize = compact
+    ? 'text-2xl sm:text-3xl md:text-5xl lg:text-6xl'
+    : 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
+  const scoreSize = compact
+    ? 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
+    : 'text-4xl sm:text-5xl md:text-7xl lg:text-8xl'
   return (
     <motion.button
       onClick={onClick}
@@ -155,7 +172,7 @@ function TeamRow({ team, index, flashKey, onClick }) {
       animate={{ opacity: 1, x: 0 }}
       transition={{ type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 }}
       whileTap={{ scale: 0.995 }}
-      className="relative flex-1 min-h-0 flex items-center justify-between px-6 md:px-12 border-b-2 border-ink last:border-b-0 overflow-hidden text-left"
+      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-b-2 border-ink last:border-b-0 overflow-hidden text-left`}
       style={{ background: team.color }}
     >
       <AnimatePresence>
@@ -170,15 +187,47 @@ function TeamRow({ team, index, flashKey, onClick }) {
         )}
       </AnimatePresence>
 
-      <div className="relative z-10 flex items-center gap-3 md:gap-5 min-w-0">
+      <div className={`relative z-10 flex items-center gap-3 md:gap-5 min-w-0 ${compact ? 'pr-[20%] sm:pr-[14%] md:pr-[14%]' : ''}`}>
         <div className="w-3 md:w-4 h-12 md:h-16 rounded-full bg-ink/15" />
-        <h2 className="font-display font-bold text-3xl sm:text-4xl md:text-6xl lg:text-7xl truncate">
+        <h2 className={`font-display font-bold truncate ${nameSize}`}>
           {team.name}
         </h2>
       </div>
-      <div className="relative z-10 font-display font-bold text-4xl sm:text-5xl md:text-7xl lg:text-8xl tabular-nums">
+      <div className={`relative z-10 font-display font-bold tabular-nums ${scoreSize}`}>
         <AnimatedNumber value={team.score} />
       </div>
     </motion.button>
+  )
+}
+
+export function LogoCenterBadge({ src }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+      <motion.div
+        initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
+        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+        transition={{ type: 'spring', stiffness: 180, damping: 16 }}
+        className="rounded-full border-2 border-ink bg-white shadow-chunk grid place-items-center overflow-hidden w-40 h-40 sm:w-52 sm:h-52 md:w-64 md:h-64 lg:w-72 lg:h-72"
+      >
+        <img src={src} alt="Game logo" className="w-[80%] h-[80%] object-contain" />
+      </motion.div>
+    </div>
+  )
+}
+
+export function LogoTopRow({ src }) {
+  return (
+    <motion.div
+      initial={{ y: -20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 160, damping: 18 }}
+      className="flex-1 min-h-0 bg-white border-b-2 border-ink px-6 md:px-12 py-3 md:py-5"
+    >
+      <img
+        src={src}
+        alt="Game logo"
+        className="block w-full h-full object-contain"
+      />
+    </motion.div>
   )
 }

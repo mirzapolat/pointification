@@ -12,3 +12,8 @@ export const supabase = createClient(url ?? 'http://localhost', anon ?? 'public-
 })
 
 if (typeof window !== 'undefined') window.supabase = supabase
+
+export function logoUrl(path) {
+  if (!path) return null
+  return supabase.storage.from('game-logos').getPublicUrl(path).data.publicUrl
+}

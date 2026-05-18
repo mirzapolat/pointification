@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import GameEditor from '../components/GameEditor.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
@@ -25,7 +25,7 @@ export default function GameList() {
   const load = async () => {
     const { data, error } = await supabase
       .from('games')
-      .select('id, name, user_id, is_public, public_token, archived_at, created_at, updated_at, teams (id, name, color)')
+      .select('id, name, user_id, is_public, public_token, archived_at, created_at, updated_at, logo_path, logo_placement, teams (id, name, color)')
       .order('updated_at', { ascending: false })
     if (!error) setGames(data ?? [])
     setLoading(false)
@@ -227,18 +227,18 @@ function Sidebar({ filter, onChange, counts }) {
               <button
                 key={f.id}
                 onClick={() => onChange(f.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 border-ink font-display font-semibold text-sm transition shadow-chunk-sm ${
-                  active ? 'bg-ink text-cream' : 'bg-white hover:bg-candy-yellow'
+                style={active ? { background: f.accent } : undefined}
+                className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 border-ink font-display font-semibold text-sm transition text-ink ${
+                  active ? 'shadow-chunk-sm' : 'bg-white hover:bg-candy-yellow'
                 }`}
               >
                 <span
-                  className={`w-6 h-6 rounded-lg border-2 border-ink grid place-items-center ${active ? 'bg-cream text-ink' : ''}`}
-                  style={!active ? { background: f.accent } : undefined}
+                  className="w-6 h-6 rounded-lg border-2 border-ink grid place-items-center bg-white"
                 >
                   <Icon />
                 </span>
                 <span>{f.label}</span>
-                <span className={`min-w-[22px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink ${active ? 'bg-cream text-ink' : 'bg-cream'}`}>
+                <span className="min-w-[22px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink bg-white">
                   {counts[f.id]}
                 </span>
               </button>
@@ -261,23 +261,21 @@ function Sidebar({ filter, onChange, counts }) {
                 <li key={f.id}>
                   <button
                     onClick={() => onChange(f.id)}
-                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border-2 font-display font-semibold transition relative ${
+                    style={active ? { background: f.accent } : undefined}
+                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border-2 font-display font-semibold transition relative text-ink ${
                       active
-                        ? 'border-ink bg-ink text-cream shadow-chunk-sm'
+                        ? 'border-ink shadow-chunk-sm'
                         : 'border-transparent hover:border-ink hover:bg-cream'
                     }`}
                   >
                     <span
-                      className={`w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0 ${active ? 'bg-cream text-ink' : ''}`}
-                      style={!active ? { background: f.accent } : undefined}
+                      className="w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0 bg-white"
                     >
                       <Icon />
                     </span>
                     <span className="flex-1 text-left truncate">{f.label}</span>
                     <span
-                      className={`min-w-[26px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink ${
-                        active ? 'bg-cream text-ink' : 'bg-cream'
-                      }`}
+                      className="min-w-[26px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink bg-white"
                     >
                       {counts[f.id]}
                     </span>
@@ -338,6 +336,7 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
   const accent = TEAM_PALETTE[i % TEAM_PALETTE.length]
   const teams = game.teams ?? []
   const isArchived = !!game.archived_at
+  const logo = game.logo_path ? logoUrl(game.logo_path) : null
   return (
     <motion.div
       layout
@@ -357,7 +356,7 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
           <div className="absolute bottom-2 right-3 font-display text-5xl font-bold text-ink/15">
             {teams.length || '0'}
           </div>
-          <div className="absolute top-3 left-3 flex gap-1.5">
+          <div className={`absolute top-3 ${logo ? 'left-[5.25rem]' : 'left-3'} flex gap-1.5`}>
             {!isOwner && (
               <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
                 shared
@@ -369,6 +368,11 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
               </span>
             )}
           </div>
+          {logo && (
+            <div className="absolute top-2 left-2 w-16 h-16 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm grid place-items-center overflow-hidden -rotate-3">
+              <img src={logo} alt="" className="w-[78%] h-[78%] object-contain" />
+            </div>
+          )}
         </div>
         <div className="p-5 flex-1">
           <h3 className="font-display text-2xl font-bold leading-tight truncate">{game.name}</h3>
