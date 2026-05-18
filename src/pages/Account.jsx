@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
@@ -21,15 +21,9 @@ export default function Account() {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 md:px-10 py-10 space-y-6">
-        <div>
-          <h2 className="font-display text-5xl font-bold tracking-tight">
-            <span className="text-rainbow">Account</span> settings.
-          </h2>
-          <p className="text-ink/60 mt-2 break-all">Signed in as <span className="font-semibold">{user?.email}</span></p>
-        </div>
-
         <EmailCard currentEmail={user?.email} />
         <PasswordCard />
+        <PrivacyCard />
         <DangerCard onDeleted={async () => { await signOut(); nav('/login', { replace: true }) }} />
       </main>
     </motion.div>
@@ -73,14 +67,15 @@ function EmailCard({ currentEmail }) {
     setErr(null); setMsg(null)
     if (!email || email === currentEmail) return setErr('Pick a different email.')
     setBusy(true)
-    const { error } = await supabase.auth.updateUser({ email })
+    const { error } = await supabase.rpc('change_my_email', { p_email: email })
     setBusy(false)
     if (error) setErr(error.message)
-    else setMsg('Check both your old and new inbox to confirm the change.')
+    else { setMsg('Email updated.'); setEmail('') }
   }
 
   return (
     <Section title="Email" accent="#FFD93D">
+      <p className="text-sm text-ink/60 mb-3">Signed in as <span className="font-semibold break-all">{currentEmail}</span></p>
       <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
         <input
           type="email" required
@@ -94,9 +89,67 @@ function EmailCard({ currentEmail }) {
       </form>
       <Banner kind="error">{err}</Banner>
       <Banner kind="ok">{msg}</Banner>
-      <p className="text-xs text-ink/60 mt-3">
-        Supabase sends a confirmation link to the new address before the change takes effect.
-      </p>
+    </Section>
+  )
+}
+
+function PrivacyCard() {
+  const { user } = useAuth()
+  const [allowInvites, setAllowInvites] = useState(true)
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('profiles')
+        .select('allow_invites').eq('id', user.id).single()
+      if (!cancelled) {
+        if (data) setAllowInvites(data.allow_invites)
+        setLoaded(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user.id])
+
+  const toggle = async () => {
+    if (busy) return
+    const next = !allowInvites
+    setAllowInvites(next)
+    setBusy(true); setErr(null)
+    const { error } = await supabase.from('profiles')
+      .update({ allow_invites: next }).eq('id', user.id)
+    setBusy(false)
+    if (error) {
+      setAllowInvites(!next)
+      setErr(error.message)
+    }
+  }
+
+  return (
+    <Section title="Privacy" accent="#9B6DFF">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <label className="block text-sm font-semibold">Allow others to add me to games</label>
+          <p className="text-xs text-ink/60">When off, no one can invite you as a collaborator.</p>
+        </div>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={!loaded || busy}
+          aria-pressed={allowInvites}
+          className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors disabled:opacity-60 shrink-0 ${allowInvites ? 'bg-candy-mint' : 'bg-white'}`}
+        >
+          <motion.span
+            layout
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="absolute top-0.5 w-6 h-6 rounded-full bg-ink"
+            style={{ left: allowInvites ? 'calc(100% - 26px)' : '2px' }}
+          />
+        </button>
+      </div>
+      <Banner kind="error">{err}</Banner>
     </Section>
   )
 }

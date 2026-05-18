@@ -146,10 +146,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             </button>
           </div>
 
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-semibold">Teams</label>
-            <button onClick={addTeam} className="btn-chunk bg-candy-yellow text-sm py-1.5 px-3">+ Add team</button>
-          </div>
+          <label className="block text-sm font-semibold mb-2">Teams</label>
 
           <div className="space-y-2">
             {teams.map((t, i) => (
@@ -191,10 +188,18 @@ export default function GameEditor({ initial, onClose, onSaved }) {
                 >×</button>
               </motion.div>
             ))}
+            <motion.button
+              type="button"
+              layout
+              onClick={addTeam}
+              className="w-full flex items-center justify-center gap-2 p-2 rounded-2xl border-2 border-dashed border-ink/30 bg-cream/40 text-ink/60 hover:bg-candy-yellow hover:border-ink hover:text-ink font-display font-semibold transition"
+            >
+              <span className="text-lg leading-none">+</span> Add team
+            </motion.button>
           </div>
 
           {isEdit && isOwner && <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} />}
-          {isEdit && isOwner && <MembersSection gameId={initial.id} ownerId={initial.user_id} />}
+          {isEdit && isOwner && <MembersSection gameId={initial.id} />}
 
           {err && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -295,7 +300,7 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-2 pr-2 pb-2">
               <input
                 readOnly
                 value={url}
@@ -318,24 +323,19 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
   )
 }
 
-function MembersSection({ gameId, ownerId }) {
+function MembersSection({ gameId }) {
   const [members, setMembers] = useState([])
-  const [ownerProfile, setOwnerProfile] = useState(null)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [err, setErr] = useState(null)
 
   const load = async () => {
-    const [{ data: mems }, { data: own }] = await Promise.all([
-      supabase.from('game_members')
-        .select('user_id, created_at, profiles:user_id (email)')
-        .eq('game_id', gameId)
-        .order('created_at'),
-      supabase.from('profiles').select('email').eq('id', ownerId).single()
-    ])
+    const { data: mems } = await supabase.from('game_members')
+      .select('user_id, created_at, profiles:user_id (email)')
+      .eq('game_id', gameId)
+      .order('created_at')
     setMembers(mems ?? [])
-    setOwnerProfile(own ?? null)
   }
 
   useEffect(() => {
@@ -371,39 +371,37 @@ function MembersSection({ gameId, ownerId }) {
 
   return (
     <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
-      <label className="block text-sm font-semibold mb-2">Collaborators</label>
+      <label className="block text-sm font-semibold">People you've invited</label>
+      <p className="text-xs text-ink/60 mb-2">They can see and edit this game. Remove them any time.</p>
 
       <div className="space-y-2 mb-3">
-        <div className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-candy-yellow/40">
-          <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-yellow grid place-items-center font-bold">★</div>
-          <div className="flex-1 truncate">
-            <div className="font-semibold truncate">{ownerProfile?.email ?? '…'}</div>
-            <div className="text-xs text-ink/60">owner</div>
+        {members.length === 0 ? (
+          <div className="px-3 py-3 rounded-2xl border-2 border-dashed border-ink/20 text-sm text-ink/60 text-center">
+            You haven't invited anyone yet.
           </div>
-        </div>
-
-        <AnimatePresence initial={false}>
-          {members.map(m => (
-            <motion.div
-              key={m.user_id}
-              layout
-              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
-              className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white"
-            >
-              <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-mint grid place-items-center font-bold">
-                {(m.profiles?.email ?? '?')[0]?.toUpperCase()}
-              </div>
-              <div className="flex-1 truncate">
-                <div className="font-semibold truncate">{m.profiles?.email ?? '…'}</div>
-                <div className="text-xs text-ink/60">collaborator</div>
-              </div>
-              <button
-                onClick={() => remove(m.user_id, m.profiles?.email)}
-                className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
-              >Remove</button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+        ) : (
+          <AnimatePresence initial={false}>
+            {members.map(m => (
+              <motion.div
+                key={m.user_id}
+                layout
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
+                className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white"
+              >
+                <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-mint grid place-items-center font-bold">
+                  {(m.profiles?.email ?? '?')[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 truncate">
+                  <div className="font-semibold truncate">{m.profiles?.email ?? '…'}</div>
+                </div>
+                <button
+                  onClick={() => remove(m.user_id, m.profiles?.email)}
+                  className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
+                >Remove</button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
       </div>
 
       <form onSubmit={invite} className="flex gap-2">
