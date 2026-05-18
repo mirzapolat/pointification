@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useAuth } from '../lib/auth.jsx'
+
+const DONATE_URL = import.meta.env.VITE_DONATE_URL
 
 const FEATURES = [
   {
@@ -19,6 +22,18 @@ const FEATURES = [
     title: 'Play together',
     body: 'Invite collaborators by email so anyone at the table can keep score.',
     icon: '🤝',
+  },
+  {
+    color: 'bg-candy-purple',
+    title: 'Make it yours',
+    body: 'Upload a logo, choose where it appears, and theme each team with its own color.',
+    icon: '🎨',
+  },
+  {
+    color: 'bg-candy-coral',
+    title: 'Crown the winners',
+    body: 'A full-screen podium for top 1, 3, or 5 — perfect for big-screen reveals.',
+    icon: '🏆',
   },
   {
     color: 'bg-candy-blue',
@@ -49,6 +64,7 @@ export default function Landing() {
 }
 
 function Hero() {
+  const { session } = useAuth()
   return (
     <section className="text-center max-w-3xl mx-auto">
       <motion.div
@@ -75,12 +91,20 @@ function Hero() {
         transition={{ delay: 0.2 }}
         className="mt-10 md:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4"
       >
-        <Link to="/login" className="btn-chunk bg-white text-lg w-full sm:w-auto">
-          Sign in
-        </Link>
-        <Link to="/login" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
-          Start a game →
-        </Link>
+        {session ? (
+          <Link to="/" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
+            Go to dashboard →
+          </Link>
+        ) : (
+          <>
+            <Link to="/login" className="btn-chunk bg-white text-lg w-full sm:w-auto">
+              Sign in
+            </Link>
+            <Link to="/login" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
+              Start a game →
+            </Link>
+          </>
+        )}
       </motion.div>
 
       <ScoreMock />
@@ -185,6 +209,7 @@ function HowItWorks() {
 }
 
 function CTA() {
+  const { session } = useAuth()
   return (
     <section>
       <motion.div
@@ -195,17 +220,29 @@ function CTA() {
         className="card-chunk bg-candy-mint p-10 md:p-16 text-center relative overflow-hidden"
       >
         <div className="absolute inset-0 bg-dots opacity-20 pointer-events-none" />
-        <h3 className="relative font-display font-bold text-3xl md:text-5xl">Ready to keep score?</h3>
+        <h3 className="relative font-display font-bold text-3xl md:text-5xl">
+          {session ? 'Back to the action.' : 'Ready to keep score?'}
+        </h3>
         <p className="relative text-ink/70 mt-4 max-w-md mx-auto leading-relaxed">
-          It's free. Make an account, spin up a game, and start tapping.
+          {session
+            ? 'Your games are waiting on the dashboard.'
+            : "It's free. Make an account, spin up a game, and start tapping."}
         </p>
         <div className="relative mt-8 md:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-          <Link to="/login" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
-            Create an account →
-          </Link>
-          <Link to="/login" className="btn-chunk bg-white text-lg w-full sm:w-auto">
-            I already have one
-          </Link>
+          {session ? (
+            <Link to="/" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
+              Go to dashboard →
+            </Link>
+          ) : (
+            <>
+              <Link to="/login" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
+                Create an account →
+              </Link>
+              <Link to="/login" className="btn-chunk bg-white text-lg w-full sm:w-auto">
+                I already have one
+              </Link>
+            </>
+          )}
         </div>
       </motion.div>
     </section>
@@ -223,6 +260,21 @@ function Footer() {
           <span className="text-ink/60">made for game night</span>
         </div>
         <nav className="flex items-center gap-4 font-semibold text-ink/70">
+          {DONATE_URL && (
+            <>
+              <a
+                href={DONATE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-ink bg-candy-pink text-white text-sm font-display font-semibold shadow-chunk-sm hover:-translate-y-0.5 transition"
+                title="Support Pointification"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                Support
+              </a>
+              <span aria-hidden className="text-ink/30">·</span>
+            </>
+          )}
           <Link to="/imprint" className="hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">Imprint</Link>
           <span aria-hidden className="text-ink/30">·</span>
           <Link to="/privacy" className="hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">Privacy</Link>

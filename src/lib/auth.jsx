@@ -6,6 +6,8 @@ const AuthCtx = createContext(null)
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [aal, setAal] = useState(null)
+  const [aalLoading, setAalLoading] = useState(true)
   const [details, setDetails] = useState(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
 
@@ -17,6 +19,27 @@ export function AuthProvider({ children }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => sub.subscription.unsubscribe()
   }, [])
+
+  const refreshAal = useCallback(async () => {
+    if (!session) { setAal(null); setAalLoading(false); return }
+    setAalLoading(true)
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    setAal(data ?? null)
+    setAalLoading(false)
+  }, [session])
+
+  useEffect(() => {
+    if (!session) { setAal(null); setAalLoading(false); return }
+    let cancelled = false
+    setAalLoading(true)
+    ;(async () => {
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (cancelled) return
+      setAal(data ?? null)
+      setAalLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [session])
 
   const refreshDetails = useCallback(async () => {
     const uid = session?.user?.id
@@ -33,10 +56,17 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { refreshDetails() }, [refreshDetails])
 
+  const mfaRequired =
+    !!session && aal?.currentLevel === 'aal1' && aal?.nextLevel === 'aal2'
+
   const value = {
     session,
     user: session?.user ?? null,
     loading,
+    aal,
+    aalLoading,
+    mfaRequired,
+    refreshAal,
     details,
     detailsLoading,
     refreshDetails,

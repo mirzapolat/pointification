@@ -23,10 +23,12 @@ function needsOnboarding(details) {
 }
 
 function Protected({ children, allow = 'app' }) {
-  const { session, loading, details, detailsLoading } = useAuth()
+  const { session, loading, aalLoading, mfaRequired, details, detailsLoading } = useAuth()
   const loc = useLocation()
   if (loading) return <Splash />
   if (!session) return <Navigate to="/login" replace />
+  if (aalLoading) return <Splash />
+  if (mfaRequired) return <Navigate to="/login" replace state={{ from: loc.pathname }} />
   if (detailsLoading && !details) return <Splash />
 
   // Gate: force the new user through welcome → onboarding before reaching the app.
@@ -44,9 +46,11 @@ function Protected({ children, allow = 'app' }) {
 }
 
 function Home() {
-  const { session, loading, details, detailsLoading } = useAuth()
+  const { session, loading, aalLoading, mfaRequired, details, detailsLoading } = useAuth()
   if (loading) return <Splash />
   if (!session) return <Landing />
+  if (aalLoading) return <Splash />
+  if (mfaRequired) return <Navigate to="/login" replace />
   if (detailsLoading && !details) return <Splash />
   if (needsWelcome(details)) return <Navigate to="/welcome" replace />
   if (needsOnboarding(details)) return <Navigate to="/onboarding" replace />
@@ -72,6 +76,7 @@ export default function App() {
         <Route path="/imprint" element={<Imprint />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/p/:token" element={<PublicGame />} />
+        <Route path="/landing" element={<Landing />} />
         <Route path="/" element={<Home />} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
         <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />

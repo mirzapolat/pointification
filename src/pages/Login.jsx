@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
+import { supabase } from '../lib/supabase'
 
 export default function Login() {
-  const { signIn, signUp, session } = useAuth()
+  const { signIn, signUp, signOut, session, mfaRequired, aalLoading, refreshAal } = useAuth()
   const nav = useNavigate()
   const [mode, setMode] = useState('signin')
   const [name, setName] = useState('')
@@ -14,7 +15,9 @@ export default function Login() {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => { if (session) nav('/', { replace: true }) }, [session, nav])
+  useEffect(() => {
+    if (session && !aalLoading && !mfaRequired) nav('/', { replace: true })
+  }, [session, aalLoading, mfaRequired, nav])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -37,6 +40,8 @@ export default function Login() {
     }
   }
 
+  const showMfa = session && mfaRequired
+
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -58,67 +63,76 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-6 p-1 rounded-2xl border-2 border-ink bg-cream">
-          {['signin', 'signup'].map(m => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setErr(null) }}
-              className={`flex-1 py-2 rounded-xl font-display font-semibold transition ${
-                mode === m ? 'bg-ink text-cream' : 'text-ink/70 hover:text-ink'
-              }`}
-            >
-              {m === 'signin' ? 'Sign in' : 'Sign up'}
-            </button>
-          ))}
-        </div>
+        {showMfa ? (
+          <MfaChallenge
+            onCancel={async () => { await signOut() }}
+            onVerified={async () => { await refreshAal() }}
+          />
+        ) : (
+          <>
+            <div className="flex gap-2 mb-6 p-1 rounded-2xl border-2 border-ink bg-cream">
+              {['signin', 'signup'].map(m => (
+                <button
+                  key={m}
+                  onClick={() => { setMode(m); setErr(null) }}
+                  className={`flex-1 py-2 rounded-xl font-display font-semibold transition ${
+                    mode === m ? 'bg-ink text-cream' : 'text-ink/70 hover:text-ink'
+                  }`}
+                >
+                  {m === 'signin' ? 'Sign in' : 'Sign up'}
+                </button>
+              ))}
+            </div>
 
-        <form onSubmit={submit} className="space-y-3">
-          <AnimatePresence initial={false}>
-            {mode === 'signup' && (
-              <motion.input
-                key="name"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                type="text" required placeholder="your name"
-                value={name} onChange={e => setName(e.target.value)}
+            <form onSubmit={submit} className="space-y-3">
+              <AnimatePresence initial={false}>
+                {mode === 'signup' && (
+                  <motion.input
+                    key="name"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    type="text" required placeholder="your name"
+                    value={name} onChange={e => setName(e.target.value)}
+                    className="input-chunk"
+                  />
+                )}
+              </AnimatePresence>
+              <input
+                type="email" required placeholder="you@example.com"
+                value={email} onChange={e => setEmail(e.target.value)}
                 className="input-chunk"
               />
-            )}
-          </AnimatePresence>
-          <input
-            type="email" required placeholder="you@example.com"
-            value={email} onChange={e => setEmail(e.target.value)}
-            className="input-chunk"
-          />
-          <input
-            type="password" required minLength={6} placeholder="password (min 6 chars)"
-            value={password} onChange={e => setPassword(e.target.value)}
-            className="input-chunk"
-          />
-          <AnimatePresence initial={false}>
-            {mode === 'signup' && (
-              <motion.input
-                key="repeat"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                type="password" required minLength={6} placeholder="repeat password"
-                value={repeat} onChange={e => setRepeat(e.target.value)}
+              <input
+                type="password" required minLength={6} placeholder="password (min 6 chars)"
+                value={password} onChange={e => setPassword(e.target.value)}
                 className="input-chunk"
               />
-            )}
-          </AnimatePresence>
-          {err && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-              className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60"
-            >{err}</motion.div>
-          )}
-          <button disabled={busy} className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60">
-            {busy ? 'one sec…' : mode === 'signin' ? 'Sign in →' : 'Create account →'}
-          </button>
-        </form>
+              <AnimatePresence initial={false}>
+                {mode === 'signup' && (
+                  <motion.input
+                    key="repeat"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    type="password" required minLength={6} placeholder="repeat password"
+                    value={repeat} onChange={e => setRepeat(e.target.value)}
+                    className="input-chunk"
+                  />
+                )}
+              </AnimatePresence>
+              {err && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                  className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60"
+                >{err}</motion.div>
+              )}
+              <button disabled={busy} className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60">
+                {busy ? 'one sec…' : mode === 'signin' ? 'Sign in →' : 'Create account →'}
+              </button>
+            </form>
+          </>
+        )}
       </motion.div>
 
       <motion.nav
@@ -130,6 +144,87 @@ export default function Login() {
         <Link to="/privacy" className="hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">Privacy</Link>
       </motion.nav>
     </motion.div>
+  )
+}
+
+function MfaChallenge({ onCancel, onVerified }) {
+  const [factorId, setFactorId] = useState(null)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase.auth.mfa.listFactors()
+      if (cancelled) return
+      if (error) { setErr(error.message); setLoading(false); return }
+      const verified = (data?.totp ?? []).find(f => f.status === 'verified')
+      if (!verified) {
+        setErr('No verified authenticator found for this account.')
+      } else {
+        setFactorId(verified.id)
+      }
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (!factorId) return
+    setErr(null); setBusy(true)
+    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: code.trim() })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    await onVerified()
+  }
+
+  return (
+    <div>
+      <div className="mb-4">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-ink/60">Two-factor auth</div>
+        <h2 className="font-display font-bold text-2xl">Enter your code</h2>
+        <p className="text-sm text-ink/70 mt-1">Open your authenticator app and enter the 6-digit code for Pointification.</p>
+      </div>
+      {loading ? (
+        <div className="text-sm text-ink/60">Loading…</div>
+      ) : (
+        <form onSubmit={submit} className="space-y-3">
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            autoFocus
+            value={code}
+            onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456"
+            className="input-chunk font-mono tracking-[0.4em] text-center text-xl"
+            aria-label="6-digit code"
+          />
+          {err && (
+            <div className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60">{err}</div>
+          )}
+          <button
+            type="submit"
+            disabled={busy || code.length !== 6 || !factorId}
+            className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60"
+          >
+            {busy ? 'verifying…' : 'Verify →'}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="btn-chunk w-full bg-white disabled:opacity-60"
+          >
+            Cancel & sign out
+          </button>
+        </form>
+      )}
+    </div>
   )
 }
 

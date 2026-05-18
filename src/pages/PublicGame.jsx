@@ -98,7 +98,7 @@ export default function PublicGame() {
       className="fixed inset-0 flex flex-col bg-ink">
       <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
         <Link
-          to="/"
+          to="/landing"
           aria-label="Make your own scoreboard at Pointification"
           title="Make your own scoreboard"
           className="group flex items-center gap-2 rounded-xl -mx-1 px-1 py-0.5 transition hover:-translate-y-0.5"

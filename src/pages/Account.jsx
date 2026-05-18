@@ -24,6 +24,7 @@ export default function Account() {
         <NameCard />
         <EmailCard currentEmail={user?.email} />
         <PasswordCard />
+        <TwoFactorCard />
         <PrivacyCard />
         <DangerCard onDeleted={async () => { await signOut(); nav('/login', { replace: true }) }} />
       </main>
@@ -273,6 +274,217 @@ function PasswordCard() {
       </form>
       <Banner kind="error">{err}</Banner>
       <Banner kind="ok">{msg}</Banner>
+    </Section>
+  )
+}
+
+function TwoFactorCard() {
+  const { refreshAal } = useAuth()
+  const [factors, setFactors] = useState(null)
+  const [enrolling, setEnrolling] = useState(null)
+  const [disablingId, setDisablingId] = useState(null)
+  const [code, setCode] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  const load = async () => {
+    setErr(null)
+    const { data, error } = await supabase.auth.mfa.listFactors()
+    if (error) { setErr(error.message); setFactors([]); return }
+    setFactors(data?.totp ?? [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  const verified = (factors ?? []).filter(f => f.status === 'verified')
+  const enabled = verified.length > 0
+
+  const startEnroll = async () => {
+    setErr(null); setMsg(null); setBusy(true)
+    try {
+      for (const f of (factors ?? []).filter(f => f.status === 'unverified')) {
+        await supabase.auth.mfa.unenroll({ factorId: f.id })
+      }
+      const friendlyName = `Pointification ${new Date().toISOString().slice(0, 10)}`
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName })
+      if (error) { setErr(error.message); return }
+      setEnrolling({
+        factorId: data.id,
+        qrCode: data.totp.qr_code,
+        secret: data.totp.secret,
+        uri: data.totp.uri,
+      })
+      setCode('')
+      setShowSecret(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const cancelEnroll = async () => {
+    if (!enrolling) return
+    setBusy(true)
+    try { await supabase.auth.mfa.unenroll({ factorId: enrolling.factorId }) } catch {/* noop */}
+    setBusy(false)
+    setEnrolling(null)
+    setCode('')
+    setErr(null)
+  }
+
+  const finishEnroll = async (e) => {
+    e.preventDefault()
+    if (!enrolling) return
+    setErr(null); setBusy(true)
+    const { error } = await supabase.auth.mfa.challengeAndVerify({
+      factorId: enrolling.factorId,
+      code: code.trim(),
+    })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setEnrolling(null)
+    setCode('')
+    setMsg('Two-factor authentication is on.')
+    await load()
+    await refreshAal()
+  }
+
+  const startDisable = (id) => {
+    setDisablingId(id)
+    setCode('')
+    setErr(null); setMsg(null)
+  }
+
+  const cancelDisable = () => {
+    setDisablingId(null)
+    setCode('')
+    setErr(null)
+  }
+
+  const finishDisable = async (e) => {
+    e.preventDefault()
+    if (!disablingId) return
+    setErr(null); setBusy(true)
+    const { error: vErr } = await supabase.auth.mfa.challengeAndVerify({
+      factorId: disablingId,
+      code: code.trim(),
+    })
+    if (vErr) { setBusy(false); return setErr(vErr.message) }
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: disablingId })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setDisablingId(null)
+    setCode('')
+    setMsg('Two-factor authentication turned off.')
+    await load()
+    await refreshAal()
+  }
+
+  return (
+    <Section title="Two-factor auth" accent="#4D7CFF">
+      {factors === null ? (
+        <div className="text-sm text-ink/60">Loading…</div>
+      ) : enrolling ? (
+        <form onSubmit={finishEnroll} className="space-y-4">
+          <ol className="text-sm space-y-1 list-decimal pl-5 text-ink/80">
+            <li>Open an authenticator app (Google Authenticator, 1Password, Authy, etc.).</li>
+            <li>Scan the QR code below or paste the setup key into your app.</li>
+            <li>Enter the 6-digit code your app shows to finish.</li>
+          </ol>
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
+            <div className="w-44 h-44 rounded-2xl border-2 border-ink bg-white p-2 grid place-items-center shrink-0">
+              <img src={enrolling.qrCode} alt="2FA QR code" className="w-full h-full" />
+            </div>
+            <div className="flex-1 min-w-0 w-full">
+              <button
+                type="button"
+                onClick={() => setShowSecret(s => !s)}
+                className="text-xs font-semibold underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink"
+              >
+                {showSecret ? 'Hide setup key' : 'Can\'t scan? Show setup key'}
+              </button>
+              {showSecret && (
+                <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-cream font-mono text-xs break-all select-all">
+                  {enrolling.secret}
+                </div>
+              )}
+            </div>
+          </div>
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+            value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456" autoFocus
+            className="input-chunk font-mono tracking-[0.4em] text-center text-lg"
+            aria-label="6-digit code"
+          />
+          <div className="flex gap-2">
+            <button type="button" onClick={cancelEnroll} disabled={busy} className="btn-chunk bg-white flex-1 disabled:opacity-60">
+              Cancel
+            </button>
+            <button disabled={busy || code.length !== 6} className="btn-chunk bg-candy-mint flex-1 disabled:opacity-60">
+              {busy ? 'Verifying…' : 'Verify & enable'}
+            </button>
+          </div>
+          <Banner kind="error">{err}</Banner>
+        </form>
+      ) : disablingId ? (
+        <form onSubmit={finishDisable} className="space-y-3">
+          <p className="text-sm text-ink/80">
+            Enter your current 6-digit code to turn off two-factor authentication.
+          </p>
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+            value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456" autoFocus
+            className="input-chunk font-mono tracking-[0.4em] text-center text-lg"
+            aria-label="6-digit code"
+          />
+          <div className="flex gap-2">
+            <button type="button" onClick={cancelDisable} disabled={busy} className="btn-chunk bg-white flex-1 disabled:opacity-60">
+              Cancel
+            </button>
+            <button disabled={busy || code.length !== 6} className="btn-chunk bg-candy-pink text-white flex-1 disabled:opacity-60">
+              {busy ? 'Disabling…' : 'Turn off 2FA'}
+            </button>
+          </div>
+          <Banner kind="error">{err}</Banner>
+        </form>
+      ) : enabled ? (
+        <div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-candy-mint border-2 border-ink" />
+                <span className="font-semibold">2FA is on</span>
+              </div>
+              <p className="text-xs text-ink/60 mt-1">You'll be asked for a code every time you sign in.</p>
+            </div>
+            <button
+              onClick={() => startDisable(verified[0].id)}
+              className="btn-chunk bg-white text-sm py-2 px-3 shrink-0"
+            >
+              Turn off
+            </button>
+          </div>
+          <Banner kind="ok">{msg}</Banner>
+        </div>
+      ) : (
+        <div>
+          <p className="text-sm text-ink/80">
+            Add a second step at sign-in. Use any authenticator app to generate a 6-digit code from your phone.
+          </p>
+          <button
+            onClick={startEnroll}
+            disabled={busy}
+            className="btn-chunk bg-candy-mint mt-4 disabled:opacity-60"
+          >
+            {busy ? 'Preparing…' : 'Enable 2FA'}
+          </button>
+          <Banner kind="error">{err}</Banner>
+          <Banner kind="ok">{msg}</Banner>
+        </div>
+      )}
     </Section>
   )
 }
