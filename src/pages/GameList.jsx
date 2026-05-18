@@ -514,7 +514,7 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
         {onArchive && (
           <>
             <div className="w-[2px] bg-ink" />
-            <button onClick={onArchive} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-blue hover:text-white transition">
+            <button onClick={onArchive} className={`flex-1 py-2.5 font-display font-semibold hover:bg-candy-blue hover:text-white transition ${isArchived ? 'text-sm' : ''}`}>
               {isArchived ? 'Unarchive' : 'Archive'}
             </button>
           </>

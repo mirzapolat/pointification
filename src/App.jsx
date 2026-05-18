@@ -9,6 +9,7 @@ import GameScreen from './pages/GameScreen.jsx'
 import Account from './pages/Account.jsx'
 import PublicGame from './pages/PublicGame.jsx'
 import GameLog from './pages/GameLog.jsx'
+import Podium from './pages/Podium.jsx'
 import Imprint from './pages/Imprint.jsx'
 import Privacy from './pages/Privacy.jsx'
 import Landing from './pages/Landing.jsx'
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
         <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
+        <Route path="/game/:id/podium" element={<Protected><Podium /></Protected>} />
         <Route path="/account" element={<Protected><Account /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

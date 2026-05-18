@@ -97,10 +97,19 @@ export default function PublicGame() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 flex flex-col bg-ink">
       <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
-        <div className="flex items-center gap-2">
-          <img src="/pointification.png" alt="Pointification" className="w-8 h-8 object-contain" />
+        <Link
+          to="/"
+          aria-label="Make your own scoreboard at Pointification"
+          title="Make your own scoreboard"
+          className="group flex items-center gap-2 rounded-xl -mx-1 px-1 py-0.5 transition hover:-translate-y-0.5"
+        >
+          <img src="/pointification.png" alt="Pointification" className="w-8 h-8 object-contain transition-transform group-hover:rotate-[-6deg]" />
           <span className="font-display font-semibold hidden sm:inline">Pointification</span>
-        </div>
+          <span className="hidden md:inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full border-2 border-ink bg-candy-yellow text-[11px] font-bold uppercase tracking-wider shadow-chunk-sm transition-transform group-hover:-translate-y-0.5">
+            Make your own
+            <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+          </span>
+        </Link>
         <h1 className="font-display font-bold text-xl md:text-2xl truncate px-3">{game.name}</h1>
         <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
           live
