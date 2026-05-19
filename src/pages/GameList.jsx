@@ -143,7 +143,7 @@ export default function GameList() {
           className="group flex items-center gap-2.5 md:gap-3 min-w-0 rounded-2xl -m-1 p-1 transition hover:-translate-y-0.5"
         >
           <img src="/pointification.png" alt="Pointification" className="w-9 h-9 md:w-10 md:h-10 shrink-0 object-contain transition-transform group-hover:rotate-[-6deg]" />
-          <div className="min-w-0">
+          <div className="min-w-0 hidden md:block">
             <h1 className="font-display font-bold text-xl md:text-2xl leading-none">Pointification</h1>
             <p className="text-ink/60 text-xs truncate">{user?.email}</p>
           </div>
