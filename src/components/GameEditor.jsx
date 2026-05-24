@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
@@ -65,25 +65,6 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     setPresets(next)
     if (instant) await patchGame({ point_presets: next })
   }
-
-  const addPreset = (value) => {
-    if (presets.length >= MAX_PRESETS) return
-    commitPresets([...presets, value])
-  }
-
-  const removePreset = (index) => {
-    commitPresets(presets.filter((_, i) => i !== index))
-  }
-
-  const updatePreset = (index, value) => {
-    if (!Number.isFinite(value) || value === 0) return
-    if (presets[index] === value) return
-    const next = presets.slice()
-    next[index] = value
-    commitPresets(next)
-  }
-
-  const resetPresets = () => commitPresets(DEFAULT_PRESETS.slice())
 
   const addTeam = async () => {
     const color = nextColor(teams.map(t => t.color))
@@ -335,10 +316,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
 
           <PresetsSection
             presets={presets}
-            onAdd={addPreset}
-            onRemove={removePreset}
-            onUpdate={updatePreset}
-            onReset={resetPresets}
+            onChange={commitPresets}
           />
 
           {isOwner && (
@@ -1064,10 +1042,49 @@ function ColorPicker({ value, onChange }) {
 
 function tmp() { return 'tmp-' + Math.random().toString(36).slice(2, 9) }
 
-function PresetsSection({ presets, onAdd, onRemove, onUpdate, onReset }) {
-  const full = presets.length >= MAX_PRESETS
-  const isDefault = presets.length === DEFAULT_PRESETS.length
-    && presets.every((v, i) => v === DEFAULT_PRESETS[i])
+function PresetsSection({ presets, onChange }) {
+  // Map the integer array onto stable {id, value} items so Reorder.Item
+  // can key on identity (not value, which collides on edits/dupes).
+  // Sync from the prop whenever it changes from the outside (e.g. Reset).
+  const idSeed = useRef(0)
+  const [items, setItems] = useState(() =>
+    presets.map(v => ({ id: `p-${idSeed.current++}`, value: v }))
+  )
+
+  useEffect(() => {
+    setItems(prev => {
+      // If the prop matches the local items exactly, keep ids stable.
+      if (prev.length === presets.length && prev.every((it, i) => it.value === presets[i])) {
+        return prev
+      }
+      return presets.map(v => ({ id: `p-${idSeed.current++}`, value: v }))
+    })
+  }, [presets])
+
+  const push = (nextItems) => {
+    setItems(nextItems)
+    onChange(nextItems.map(it => it.value))
+  }
+
+  const full = items.length >= MAX_PRESETS
+  const isDefault = items.length === DEFAULT_PRESETS.length
+    && items.every((it, i) => it.value === DEFAULT_PRESETS[i])
+
+  const handleReorder = (next) => push(next)
+  const handleAdd = (v) => {
+    if (full) return
+    push([...items, { id: `p-${idSeed.current++}`, value: v }])
+  }
+  const handleRemove = (id) => push(items.filter(it => it.id !== id))
+  const handleUpdate = (id, v) => {
+    const idx = items.findIndex(it => it.id === id)
+    if (idx === -1 || items[idx].value === v) return
+    const next = items.slice()
+    next[idx] = { ...next[idx], value: v }
+    push(next)
+  }
+  const handleReset = () =>
+    push(DEFAULT_PRESETS.map(v => ({ id: `p-${idSeed.current++}`, value: v })))
 
   return (
     <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
@@ -1076,7 +1093,7 @@ function PresetsSection({ presets, onAdd, onRemove, onUpdate, onReset }) {
         {!isDefault && (
           <button
             type="button"
-            onClick={onReset}
+            onClick={handleReset}
             className="text-xs font-semibold text-ink/70 hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink shrink-0"
             title="Reset to ±5, ±10, ±15"
           >
@@ -1085,25 +1102,29 @@ function PresetsSection({ presets, onAdd, onRemove, onUpdate, onReset }) {
         )}
       </div>
       <p className="text-xs text-ink/60 mb-3">
-        Shown in the popup when you tap a team. Type any whole number — use a minus sign for penalties.
+        Shown in the popup when you tap a team. Type any whole number — use a minus sign for penalties. Drag the grip to rearrange.
       </p>
 
-      <div className="flex flex-wrap gap-2">
-        <AnimatePresence initial={false}>
-          {presets.map((n, i) => (
-            <PresetChip
-              key={`${i}-${n}`}
-              value={n}
-              onCommit={(v) => onUpdate(i, v)}
-              onRemove={() => onRemove(i)}
-            />
-          ))}
-        </AnimatePresence>
+      <Reorder.Group
+        axis="x"
+        values={items}
+        onReorder={handleReorder}
+        as="div"
+        className="flex flex-wrap gap-2"
+      >
+        {items.map(item => (
+          <PresetChip
+            key={item.id}
+            item={item}
+            onCommit={(v) => handleUpdate(item.id, v)}
+            onRemove={() => handleRemove(item.id)}
+          />
+        ))}
 
         <motion.button
           type="button"
           layout
-          onClick={() => onAdd(5)}
+          onClick={() => handleAdd(5)}
           disabled={full}
           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-dashed border-ink/40 bg-candy-mint/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-mint transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-mint/30"
           title="Add a reward preset"
@@ -1113,16 +1134,16 @@ function PresetsSection({ presets, onAdd, onRemove, onUpdate, onReset }) {
         <motion.button
           type="button"
           layout
-          onClick={() => onAdd(-5)}
+          onClick={() => handleAdd(-5)}
           disabled={full}
           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-dashed border-ink/40 bg-candy-pink/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-pink hover:text-white transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-pink/30 disabled:hover:text-ink"
           title="Add a penalty preset"
         >
           <span className="leading-none">−</span> penalty
         </motion.button>
-      </div>
+      </Reorder.Group>
 
-      {presets.length === 0 && (
+      {items.length === 0 && (
         <p className="text-xs text-ink/60 mt-3">
           No quick buttons — players will still see the custom amount field in the popup.
         </p>
@@ -1134,15 +1155,20 @@ function PresetsSection({ presets, onAdd, onRemove, onUpdate, onReset }) {
   )
 }
 
-function PresetChip({ value, onCommit, onRemove }) {
+function PresetChip({ item, onCommit, onRemove }) {
+  const { value } = item
   const [draft, setDraft] = useState(String(value))
+  const [dragging, setDragging] = useState(false)
+  const controls = useDragControls()
+
   useEffect(() => { setDraft(String(value)) }, [value])
 
   const parsed = parseInt(draft, 10)
   const previewPositive = Number.isFinite(parsed) ? parsed > 0 : value > 0
   const bg = previewPositive ? 'bg-candy-mint text-ink' : 'bg-candy-pink text-white'
   const xHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
-  const xBorder = previewPositive ? 'border-ink/20' : 'border-white/30'
+  const divider = previewPositive ? 'border-ink/20' : 'border-white/30'
+  const gripHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/15'
 
   const commit = () => {
     const n = parseInt(draft, 10)
@@ -1154,14 +1180,29 @@ function PresetChip({ value, onCommit, onRemove }) {
   }
 
   return (
-    <motion.div
-      layout
+    <Reorder.Item
+      value={item}
+      dragListener={false}
+      dragControls={controls}
+      onDragStart={() => setDragging(true)}
+      onDragEnd={() => setDragging(false)}
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.85 }}
       transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-      className={`flex items-stretch rounded-xl border-2 border-ink overflow-hidden font-display font-bold shadow-chunk-sm ${bg}`}
+      whileDrag={{ scale: 1.06, rotate: -2, zIndex: 30 }}
+      className={`flex items-stretch rounded-xl border-2 border-ink overflow-hidden font-display font-bold shadow-chunk-sm select-none ${bg} ${dragging ? 'cursor-grabbing' : ''}`}
+      as="div"
     >
+      <button
+        type="button"
+        onPointerDown={(e) => { e.preventDefault(); controls.start(e) }}
+        className={`px-1.5 flex items-center border-r-2 ${divider} ${gripHover} transition cursor-grab active:cursor-grabbing touch-none`}
+        title="Drag to reorder"
+        aria-label="Drag to reorder"
+      >
+        <GripIcon />
+      </button>
       <input
         type="number"
         value={draft}
@@ -1177,10 +1218,26 @@ function PresetChip({ value, onCommit, onRemove }) {
       <button
         type="button"
         onClick={onRemove}
-        className={`px-2 border-l-2 ${xBorder} ${xHover} text-sm transition`}
+        className={`px-2 border-l-2 ${divider} ${xHover} text-sm transition`}
         title="Remove preset"
         aria-label="Remove preset"
       >×</button>
-    </motion.div>
+    </Reorder.Item>
+  )
+}
+
+function GripIcon() {
+  return (
+    <svg
+      width="10" height="16" viewBox="0 0 6 10" aria-hidden
+      className="opacity-70"
+    >
+      <circle cx="1.5" cy="1.5" r="1" fill="currentColor" />
+      <circle cx="4.5" cy="1.5" r="1" fill="currentColor" />
+      <circle cx="1.5" cy="5"   r="1" fill="currentColor" />
+      <circle cx="4.5" cy="5"   r="1" fill="currentColor" />
+      <circle cx="1.5" cy="8.5" r="1" fill="currentColor" />
+      <circle cx="4.5" cy="8.5" r="1" fill="currentColor" />
+    </svg>
   )
 }
