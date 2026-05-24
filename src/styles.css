@@ -49,6 +49,11 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
+/* Strip the up/down spinner from number inputs (used in chip-style fields) */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spin { -moz-appearance: textfield; appearance: textfield; }
+
 /* gradient text */
 .text-rainbow {
   background: linear-gradient(90deg, #FF4FA3, #FFD93D 35%, #5EE2C1 65%, #4D7CFF);

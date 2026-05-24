@@ -1,11 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 
-const PRESETS = [+5, +10, +15, -5, -10, -15]
+const FALLBACK_PRESETS = [+5, +10, +15, -5, -10, -15]
 
-export default function PointPopup({ team, onApply, onClose, busy }) {
+export default function PointPopup({ team, presets, onApply, onClose, busy }) {
   const [custom, setCustom] = useState('')
   const inputRef = useRef(null)
+
+  // Defensive: filter to valid signed integers and dedupe, in case the
+  // server ever returns something odd. Preserve the user's chosen order.
+  const buttons = (() => {
+    const source = Array.isArray(presets) && presets.length ? presets : FALLBACK_PRESETS
+    const seen = new Set()
+    const out = []
+    for (const n of source) {
+      const v = Number(n)
+      if (!Number.isFinite(v) || v === 0 || seen.has(v)) continue
+      seen.add(v)
+      out.push(v)
+    }
+    return out
+  })()
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -51,19 +66,21 @@ export default function PointPopup({ team, onApply, onClose, busy }) {
         </div>
 
         <div className="p-5">
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            {PRESETS.map(n => (
-              <motion.button
-                key={n}
-                whileHover={{ y: -2 }} whileTap={{ scale: 0.96 }}
-                disabled={busy}
-                onClick={() => apply(n)}
-                className={`btn-chunk py-4 text-2xl font-bold ${n > 0 ? 'bg-candy-mint' : 'bg-candy-pink text-white'}`}
-              >
-                {n > 0 ? `+${n}` : n}
-              </motion.button>
-            ))}
-          </div>
+          {buttons.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {buttons.map(n => (
+                <motion.button
+                  key={n}
+                  whileHover={{ y: -2 }} whileTap={{ scale: 0.96 }}
+                  disabled={busy}
+                  onClick={() => apply(n)}
+                  className={`btn-chunk py-4 text-2xl font-bold ${n > 0 ? 'bg-candy-mint' : 'bg-candy-pink text-white'}`}
+                >
+                  {n > 0 ? `+${n}` : n}
+                </motion.button>
+              ))}
+            </div>
+          )}
 
           <form onSubmit={submitCustom} className="flex gap-2">
             <input

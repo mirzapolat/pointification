@@ -5,6 +5,9 @@ import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
 import { useDialogs } from './Dialogs.jsx'
 
+const DEFAULT_PRESETS = [5, 10, 15, -5, -10, -15]
+const MAX_PRESETS = 24
+
 // initial: null for new game, or full game object (with teams + user_id)
 export default function GameEditor({ initial, onClose, onSaved }) {
   const { user } = useAuth()
@@ -14,6 +17,9 @@ export default function GameEditor({ initial, onClose, onSaved }) {
 
   const [name, setName] = useState(initial?.name ?? '')
   const [allowNegative, setAllowNegative] = useState(!!initial?.allow_negative)
+  const [presets, setPresets] = useState(
+    Array.isArray(initial?.point_presets) ? [...initial.point_presets] : DEFAULT_PRESETS.slice()
+  )
   const [teams, setTeams] = useState(
     initial?.teams?.length
       ? initial.teams.map(t => ({ ...t }))
@@ -54,6 +60,30 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     setAllowNegative(next)
     if (instant) await patchGame({ allow_negative: next })
   }
+
+  const commitPresets = async (next) => {
+    setPresets(next)
+    if (instant) await patchGame({ point_presets: next })
+  }
+
+  const addPreset = (value) => {
+    if (presets.length >= MAX_PRESETS) return
+    commitPresets([...presets, value])
+  }
+
+  const removePreset = (index) => {
+    commitPresets(presets.filter((_, i) => i !== index))
+  }
+
+  const updatePreset = (index, value) => {
+    if (!Number.isFinite(value) || value === 0) return
+    if (presets[index] === value) return
+    const next = presets.slice()
+    next[index] = value
+    commitPresets(next)
+  }
+
+  const resetPresets = () => commitPresets(DEFAULT_PRESETS.slice())
 
   const addTeam = async () => {
     const color = nextColor(teams.map(t => t.color))
@@ -199,9 +229,14 @@ export default function GameEditor({ initial, onClose, onSaved }) {
       const { data, error } = await supabase.rpc('create_game', { p_name: name })
       if (error) throw error
       const gameId = data.id
-      if (allowNegative) {
+      const samePresets = presets.length === DEFAULT_PRESETS.length
+        && presets.every((v, i) => v === DEFAULT_PRESETS[i])
+      const initialPatch = {}
+      if (allowNegative) initialPatch.allow_negative = true
+      if (!samePresets) initialPatch.point_presets = presets
+      if (Object.keys(initialPatch).length) {
         const { error: e2 } = await supabase.from('games')
-          .update({ allow_negative: true }).eq('id', gameId)
+          .update(initialPatch).eq('id', gameId)
         if (e2) throw e2
       }
 
@@ -297,6 +332,14 @@ export default function GameEditor({ initial, onClose, onSaved }) {
               />
             </button>
           </div>
+
+          <PresetsSection
+            presets={presets}
+            onAdd={addPreset}
+            onRemove={removePreset}
+            onUpdate={updatePreset}
+            onReset={resetPresets}
+          />
 
           {isOwner && (
             <LogoSection
@@ -1020,3 +1063,124 @@ function ColorPicker({ value, onChange }) {
 }
 
 function tmp() { return 'tmp-' + Math.random().toString(36).slice(2, 9) }
+
+function PresetsSection({ presets, onAdd, onRemove, onUpdate, onReset }) {
+  const full = presets.length >= MAX_PRESETS
+  const isDefault = presets.length === DEFAULT_PRESETS.length
+    && presets.every((v, i) => v === DEFAULT_PRESETS[i])
+
+  return (
+    <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <label className="block text-sm font-semibold">Quick point buttons</label>
+        {!isDefault && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-xs font-semibold text-ink/70 hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink shrink-0"
+            title="Reset to ±5, ±10, ±15"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-ink/60 mb-3">
+        Shown in the popup when you tap a team. Type any whole number — use a minus sign for penalties.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <AnimatePresence initial={false}>
+          {presets.map((n, i) => (
+            <PresetChip
+              key={`${i}-${n}`}
+              value={n}
+              onCommit={(v) => onUpdate(i, v)}
+              onRemove={() => onRemove(i)}
+            />
+          ))}
+        </AnimatePresence>
+
+        <motion.button
+          type="button"
+          layout
+          onClick={() => onAdd(5)}
+          disabled={full}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-dashed border-ink/40 bg-candy-mint/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-mint transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-mint/30"
+          title="Add a reward preset"
+        >
+          <span className="leading-none">＋</span> reward
+        </motion.button>
+        <motion.button
+          type="button"
+          layout
+          onClick={() => onAdd(-5)}
+          disabled={full}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-dashed border-ink/40 bg-candy-pink/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-pink hover:text-white transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-pink/30 disabled:hover:text-ink"
+          title="Add a penalty preset"
+        >
+          <span className="leading-none">−</span> penalty
+        </motion.button>
+      </div>
+
+      {presets.length === 0 && (
+        <p className="text-xs text-ink/60 mt-3">
+          No quick buttons — players will still see the custom amount field in the popup.
+        </p>
+      )}
+      {full && (
+        <p className="text-xs text-ink/60 mt-3">Maximum of {MAX_PRESETS} presets reached.</p>
+      )}
+    </div>
+  )
+}
+
+function PresetChip({ value, onCommit, onRemove }) {
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => { setDraft(String(value)) }, [value])
+
+  const parsed = parseInt(draft, 10)
+  const previewPositive = Number.isFinite(parsed) ? parsed > 0 : value > 0
+  const bg = previewPositive ? 'bg-candy-mint text-ink' : 'bg-candy-pink text-white'
+  const xHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
+  const xBorder = previewPositive ? 'border-ink/20' : 'border-white/30'
+
+  const commit = () => {
+    const n = parseInt(draft, 10)
+    if (!Number.isFinite(n) || n === 0) {
+      setDraft(String(value)) // revert silently
+      return
+    }
+    onCommit(n)
+  }
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.85 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.85 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+      className={`flex items-stretch rounded-xl border-2 border-ink overflow-hidden font-display font-bold shadow-chunk-sm ${bg}`}
+    >
+      <input
+        type="number"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') { setDraft(String(value)); e.currentTarget.blur() }
+        }}
+        className="w-16 px-2 py-1.5 bg-transparent outline-none text-center text-lg tabular-nums no-spin"
+        aria-label="Preset value"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        className={`px-2 border-l-2 ${xBorder} ${xHover} text-sm transition`}
+        title="Remove preset"
+        aria-label="Remove preset"
+      >×</button>
+    </motion.div>
+  )
+}

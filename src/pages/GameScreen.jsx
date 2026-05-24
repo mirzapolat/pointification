@@ -19,7 +19,7 @@ export default function GameScreen() {
 
   const load = async () => {
     const [{ data: g }, { data: t }] = await Promise.all([
-      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement, logo_shape, logo_scale').eq('id', id).single(),
+      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets').eq('id', id).single(),
       supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position')
     ])
     setGame(g ?? null)
@@ -143,6 +143,7 @@ export default function GameScreen() {
         {activeTeam && (
           <PointPopup
             team={activeTeam}
+            presets={game.point_presets}
             busy={busy}
             onApply={async (n) => { await applyDelta(activeTeam.id, n) }}
             onClose={() => setActive(null)}
