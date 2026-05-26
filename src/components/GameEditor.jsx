@@ -915,11 +915,9 @@ function ColorPicker({ value, onChange }) {
   const customRef = useRef(null)
   const [pickingCustom, setPickingCustom] = useState(false)
   const [hexDraft, setHexDraft] = useState(value ?? '')
-  const [draftColor, setDraftColor] = useState(null)
 
   const sameHex = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase()
-  const effective = draftColor ?? value
-  const isCustom = !!effective && !TEAM_PALETTE.some(c => sameHex(c, effective))
+  const isCustom = !!value && !TEAM_PALETTE.some(c => sameHex(c, value))
 
   useEffect(() => { setHexDraft(value ?? '') }, [value])
 
@@ -946,17 +944,12 @@ function ColorPicker({ value, onChange }) {
     setTimeout(() => setPickingCustom(false), 400)
   }
 
-  // While the native dialog is open, just preview locally so we don't fire
-  // a Supabase update for every micro-change. Commit once on blur (dialog close).
+  // Commit live as the native picker reports changes. The hidden input is
+  // sr-only and never receives focus (so blur never fires), so we can't defer
+  // the commit until close — just apply each change directly.
   const onNativeInput = (e) => {
-    setDraftColor(e.target.value)
-  }
-  const onNativeCommit = () => {
-    setPickingCustom(false)
-    if (draftColor && !sameHex(draftColor, value)) {
-      onChange(draftColor)
-    }
-    setDraftColor(null)
+    const c = e.target.value
+    if (c && !sameHex(c, value)) onChange(c)
   }
 
   const commitHex = (raw) => {
@@ -1002,7 +995,7 @@ function ColorPicker({ value, onChange }) {
                 type="button"
                 onClick={openNative}
                 className={`relative w-10 h-10 rounded-lg border-2 border-ink overflow-hidden shrink-0 transition-transform hover:-translate-y-0.5 ${isCustom ? 'ring-2 ring-ink ring-offset-2 ring-offset-white' : ''}`}
-                style={isCustom ? { background: effective } : { background: 'conic-gradient(from 90deg, #FF4FA3, #FFD93D, #5EE2C1, #4D7CFF, #9B6DFF, #FF4FA3)' }}
+                style={isCustom ? { background: value } : { background: 'conic-gradient(from 90deg, #FF4FA3, #FFD93D, #5EE2C1, #4D7CFF, #9B6DFF, #FF4FA3)' }}
                 title="Pick any color"
                 aria-label="Pick any color"
               >
@@ -1013,10 +1006,8 @@ function ColorPicker({ value, onChange }) {
               <input
                 ref={customRef}
                 type="color"
-                defaultValue={isCustom ? effective : '#FF4FA3'}
+                defaultValue={isCustom ? value : '#FF4FA3'}
                 onChange={onNativeInput}
-                onBlur={onNativeCommit}
-                onFocus={() => setPickingCustom(true)}
                 className="sr-only"
                 tabIndex={-1}
                 aria-hidden
