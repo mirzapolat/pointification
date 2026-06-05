@@ -3,31 +3,41 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 
-const SIZES = [
-  { id: '1', label: 'Single', count: 1 },
-  { id: '3', label: 'Top 3', count: 3 },
-  { id: '5', label: 'Top 5', count: 5 },
-]
+const DEFAULT_SIZE = 3
+const MAX_SIZE = 20
 
-const POSITION_ORDER = {
-  0: [],
-  1: [0],
-  2: [1, 0],
-  3: [1, 0, 2],
-  4: [3, 1, 0, 2],
-  5: [3, 1, 0, 2, 4],
+function makePositionOrder(n) {
+  const order = []
+  for (let i = 0; i < n; i++) {
+    if (i === 0) order.push(0)
+    else if (i % 2 === 1) order.unshift(i)
+    else order.push(i)
+  }
+  return order
 }
 
-const RANK_HEIGHT = {
-  1: 'min(38vh, 380px)',
-  2: 'min(28vh, 290px)',
-  3: 'min(20vh, 220px)',
-  4: 'min(14vh, 160px)',
-  5: 'min(11vh, 130px)',
+function rankHeight(rank, total) {
+  const span = Math.max(1, total - 1)
+  const t = (rank - 1) / span
+  const maxPx = 380
+  const minPx = 110
+  const maxVh = 38
+  const minVh = 11
+  const px = Math.round(maxPx - (maxPx - minPx) * t)
+  const vh = Math.round((maxVh - (maxVh - minVh) * t) * 10) / 10
+  return `min(${vh}vh, ${px}px)`
 }
 
-const RANK_LABEL = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' }
-const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '🏅', 5: '🏅' }
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`
+}
+
+const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' }
+function rankMedal(rank) {
+  return RANK_MEDAL[rank] ?? '🏅'
+}
 
 const CONFETTI_COLORS = ['#FF4FA3', '#FFD93D', '#5EE2C1', '#4D7CFF', '#9B6DFF', '#FF7A59']
 
@@ -35,8 +45,10 @@ export default function Podium() {
   const { id } = useParams()
   const nav = useNavigate()
   const [params, setParams] = useSearchParams()
-  const sizeId = params.get('size') ?? '3'
-  const size = SIZES.find(s => s.id === sizeId) ?? SIZES[1]
+  const requestedSize = Number.parseInt(params.get('size') ?? '', 10)
+  const desiredCount = Number.isFinite(requestedSize) && requestedSize > 0
+    ? Math.min(requestedSize, MAX_SIZE)
+    : DEFAULT_SIZE
 
   const [game, setGame] = useState(null)
   const [teams, setTeams] = useState([])
@@ -58,14 +70,25 @@ export default function Podium() {
     return () => { cancelled = true }
   }, [id])
 
+  const maxCount = Math.max(1, teams.length)
+  const count = Math.min(desiredCount, maxCount)
+
   const ranked = useMemo(
-    () => [...teams].sort((a, b) => b.score - a.score).slice(0, size.count),
-    [teams, size.count]
+    () => [...teams].sort((a, b) => b.score - a.score).slice(0, count),
+    [teams, count]
   )
 
   const totalSteps = ranked.length
 
-  useEffect(() => { setStep(0) }, [size.count])
+  useEffect(() => { setStep(0) }, [count])
+
+  const setCount = (n) => {
+    const clamped = Math.max(1, Math.min(MAX_SIZE, n))
+    const next = new URLSearchParams(params)
+    next.set('size', String(clamped))
+    setParams(next)
+    setStep(0)
+  }
 
   useEffect(() => {
     const onKey = (e) => {
@@ -107,7 +130,8 @@ export default function Podium() {
     )
   }
 
-  const slotOrder = POSITION_ORDER[ranked.length] ?? Array.from({ length: ranked.length }, (_, i) => i)
+  const slotOrder = makePositionOrder(ranked.length)
+  const totalRanks = ranked.length
   const finished = totalSteps > 0 && step >= totalSteps
   const nextRank = totalSteps - step
   const hasTeams = ranked.length > 0
@@ -142,18 +166,28 @@ export default function Podium() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 p-1 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm">
-            {SIZES.map(s => (
-              <button
-                key={s.id}
-                onClick={() => { setParams({ size: s.id }); setStep(0) }}
-                className={`px-3 py-1.5 rounded-xl font-display font-semibold text-sm transition ${
-                  s.id === size.id ? 'bg-candy-pink text-white' : 'text-ink/70 hover:text-ink hover:bg-cream'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1 p-1 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm">
+            <button
+              onClick={() => setCount(count - 1)}
+              disabled={count <= 1}
+              className="w-8 h-8 grid place-items-center rounded-xl font-display font-bold text-xl leading-none text-ink/70 hover:text-ink hover:bg-cream disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink/70"
+              aria-label="Decrease podium size"
+              title="Smaller podium"
+            >
+              −
+            </button>
+            <div className="px-2 min-w-[4.5rem] text-center font-display font-semibold text-sm select-none">
+              {count === 1 ? 'Winner' : `Top ${count}`}
+            </div>
+            <button
+              onClick={() => setCount(count + 1)}
+              disabled={count >= maxCount}
+              className="w-8 h-8 grid place-items-center rounded-xl font-display font-bold text-xl leading-none text-ink/70 hover:text-ink hover:bg-cream disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink/70"
+              aria-label="Increase podium size"
+              title="Larger podium"
+            >
+              +
+            </button>
           </div>
           <button
             onClick={() => setStep(0)}
@@ -179,7 +213,7 @@ export default function Podium() {
             <p className="text-ink/60 mt-1">Add some teams and play a round first.</p>
           </div>
         ) : (
-          <div className="flex items-end justify-center gap-3 md:gap-6 w-full max-w-6xl">
+          <div className="flex items-end justify-center gap-2 md:gap-4 w-full max-w-6xl">
             {slotOrder.map(i => {
               const team = ranked[i]
               const rank = i + 1
@@ -189,6 +223,7 @@ export default function Podium() {
                   key={team.id}
                   team={team}
                   rank={rank}
+                  total={totalRanks}
                   revealed={revealed}
                   isWinner={rank === 1}
                 />
@@ -228,19 +263,19 @@ export default function Podium() {
 
 function nextRankLabel(rank) {
   if (rank === 1) return 'the winner'
-  return `${RANK_LABEL[rank] ?? `${rank}th`} place`
+  return `${ordinal(rank)} place`
 }
 
-function PodiumSlot({ team, rank, revealed, isWinner }) {
-  const height = RANK_HEIGHT[rank] ?? RANK_HEIGHT[5]
-  const medal = RANK_MEDAL[rank]
-  const label = RANK_LABEL[rank]
+function PodiumSlot({ team, rank, total, revealed, isWinner }) {
+  const height = rankHeight(rank, total)
+  const medal = rankMedal(rank)
+  const label = ordinal(rank)
 
   const widthClass = isWinner
-    ? 'w-32 sm:w-40 md:w-56'
+    ? 'w-28 sm:w-36 md:w-52'
     : rank <= 3
-      ? 'w-24 sm:w-32 md:w-44'
-      : 'w-20 sm:w-28 md:w-36'
+      ? 'w-20 sm:w-28 md:w-40'
+      : 'w-16 sm:w-24 md:w-32'
 
   return (
     <div className={`flex flex-col items-center ${widthClass} shrink-0`}>
