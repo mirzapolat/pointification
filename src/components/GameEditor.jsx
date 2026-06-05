@@ -7,6 +7,12 @@ import { useDialogs } from './Dialogs.jsx'
 
 const DEFAULT_PRESETS = [5, 10, 15, -5, -10, -15]
 const MAX_PRESETS = 24
+const SORT_MODES = ['manual', 'desc', 'asc']
+const SORT_OPTIONS = [
+  { id: 'manual', label: 'Manual', hint: 'Drag handles set order' },
+  { id: 'desc', label: 'Points ↓', hint: 'Highest score on top' },
+  { id: 'asc', label: 'Points ↑', hint: 'Lowest score on top' },
+]
 
 // initial: null for new game, or full game object (with teams + user_id)
 export default function GameEditor({ initial, onClose, onSaved }) {
@@ -17,6 +23,9 @@ export default function GameEditor({ initial, onClose, onSaved }) {
 
   const [name, setName] = useState(initial?.name ?? '')
   const [allowNegative, setAllowNegative] = useState(!!initial?.allow_negative)
+  const [teamSort, setTeamSort] = useState(
+    SORT_MODES.includes(initial?.team_sort) ? initial.team_sort : 'manual'
+  )
   const [presets, setPresets] = useState(
     Array.isArray(initial?.point_presets) ? [...initial.point_presets] : DEFAULT_PRESETS.slice()
   )
@@ -59,6 +68,12 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     const next = !allowNegative
     setAllowNegative(next)
     if (instant) await patchGame({ allow_negative: next })
+  }
+
+  const commitTeamSort = async (mode) => {
+    if (!SORT_MODES.includes(mode) || mode === teamSort) return
+    setTeamSort(mode)
+    if (instant) await patchGame({ team_sort: mode })
   }
 
   const commitPresets = async (next) => {
@@ -215,6 +230,7 @@ export default function GameEditor({ initial, onClose, onSaved }) {
       const initialPatch = {}
       if (allowNegative) initialPatch.allow_negative = true
       if (!samePresets) initialPatch.point_presets = presets
+      if (teamSort !== 'manual') initialPatch.team_sort = teamSort
       if (Object.keys(initialPatch).length) {
         const { error: e2 } = await supabase.from('games')
           .update(initialPatch).eq('id', gameId)
@@ -314,6 +330,38 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             </button>
           </div>
 
+          <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+            <div className="flex items-baseline justify-between gap-3 mb-2">
+              <label className="block text-sm font-semibold">Team order</label>
+              <span className="text-xs text-ink/60 truncate">
+                {SORT_OPTIONS.find(o => o.id === teamSort)?.hint}
+              </span>
+            </div>
+            <div
+              role="radiogroup"
+              aria-label="Team order"
+              className="grid grid-cols-3 gap-1 p-1 rounded-2xl border-2 border-ink bg-white"
+            >
+              {SORT_OPTIONS.map(opt => {
+                const active = opt.id === teamSort
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => commitTeamSort(opt.id)}
+                    className={`px-2 py-2 rounded-xl font-display font-semibold text-sm transition ${
+                      active ? 'bg-candy-mint text-ink shadow-chunk-sm' : 'text-ink/70 hover:text-ink hover:bg-cream'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <PresetsSection
             presets={presets}
             onChange={commitPresets}
@@ -350,17 +398,17 @@ export default function GameEditor({ initial, onClose, onSaved }) {
                   <button
                     type="button"
                     onClick={() => moveTeam(i, -1)}
-                    disabled={i === 0}
+                    disabled={i === 0 || teamSort !== 'manual'}
                     className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
-                    title="Move up"
+                    title={teamSort === 'manual' ? 'Move up' : 'Sorted by points — switch to Manual to reorder'}
                     aria-label="Move up"
                   >▲</button>
                   <button
                     type="button"
                     onClick={() => moveTeam(i, 1)}
-                    disabled={i === teams.length - 1}
+                    disabled={i === teams.length - 1 || teamSort !== 'manual'}
                     className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
-                    title="Move down"
+                    title={teamSort === 'manual' ? 'Move down' : 'Sorted by points — switch to Manual to reorder'}
                     aria-label="Move down"
                   >▼</button>
                 </div>

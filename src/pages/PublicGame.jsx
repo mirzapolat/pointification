@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
-import { LogoCenterBadge, LogoTopRow } from './GameScreen.jsx'
+import { LogoCenterBadge, LogoTopRow, sortTeams } from './GameScreen.jsx'
 
 export default function PublicGame() {
   const { token } = useParams()
@@ -17,7 +17,7 @@ export default function PublicGame() {
     ;(async () => {
       const { data: g } = await supabase
         .from('games')
-        .select('id, name, public_token, is_public, logo_path, logo_placement, logo_shape, logo_scale')
+        .select('id, name, public_token, is_public, logo_path, logo_placement, logo_shape, logo_scale, team_sort')
         .eq('public_token', token)
         .eq('is_public', true)
         .maybeSingle()
@@ -89,6 +89,10 @@ export default function PublicGame() {
     )
   }
 
+  const sortedTeams = useMemo(
+    () => sortTeams(teams, game?.team_sort),
+    [teams, game?.team_sort]
+  )
   const logoSrc = game?.logo_path ? logoUrl(game.logo_path) : null
   const showCenter = !!logoSrc && game?.logo_placement === 'center'
   const showTop = !!logoSrc && game?.logo_placement === 'top'
@@ -118,9 +122,9 @@ export default function PublicGame() {
 
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {showTop && <LogoTopRow src={logoSrc} />}
-        {teams.length === 0
+        {sortedTeams.length === 0
           ? <div className="flex-1 grid place-items-center text-cream/70 font-display text-xl">No teams yet.</div>
-          : teams.map((t, i) => (
+          : sortedTeams.map((t, i) => (
               <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} compact={showCenter} />
             ))}
         {showCenter && <LogoCenterBadge src={logoSrc} shape={game.logo_shape} scale={game.logo_scale} />}

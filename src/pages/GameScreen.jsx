@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
@@ -19,7 +19,7 @@ export default function GameScreen() {
 
   const load = async () => {
     const [{ data: g }, { data: t }] = await Promise.all([
-      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets').eq('id', id).single(),
+      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort').eq('id', id).single(),
       supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position')
     ])
     setGame(g ?? null)
@@ -106,6 +106,10 @@ export default function GameScreen() {
     )
   }
 
+  const sortedTeams = useMemo(
+    () => sortTeams(teams, game?.team_sort),
+    [teams, game?.team_sort]
+  )
   const activeTeam = teams.find(t => t.id === active)
   const logoSrc = game.logo_path ? logoUrl(game.logo_path) : null
   const showCenter = !!logoSrc && game.logo_placement === 'center'
@@ -124,9 +128,9 @@ export default function GameScreen() {
       {/* fill remaining */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {showTop && <LogoTopRow src={logoSrc} />}
-        {teams.length === 0 ? (
+        {sortedTeams.length === 0 ? (
           <div className="flex-1 grid place-items-center text-cream/70 font-display text-xl">No teams. Edit the game to add some.</div>
-        ) : teams.map((t, i) => (
+        ) : sortedTeams.map((t, i) => (
           <TeamRow
             key={t.id}
             team={t}
@@ -221,6 +225,16 @@ export function LogoCenterBadge({ src, shape = 'circle', scale = 0.8 }) {
       </motion.div>
     </div>
   )
+}
+
+export function sortTeams(teams, mode) {
+  if (mode === 'asc') {
+    return [...teams].sort((a, b) => a.score - b.score || a.position - b.position)
+  }
+  if (mode === 'desc') {
+    return [...teams].sort((a, b) => b.score - a.score || a.position - b.position)
+  }
+  return teams
 }
 
 export function LogoTopRow({ src }) {
