@@ -73,6 +73,11 @@ export default function PublicGame() {
     return () => { supabase.removeChannel(channel) }
   }, [game?.id, token])
 
+  const sortedTeams = useMemo(
+    () => sortTeams(teams, game?.team_sort),
+    [teams, game?.team_sort]
+  )
+
   if (status === 'loading') {
     return <div className="h-full grid place-items-center bg-cream font-display text-3xl animate-pulse">loading…</div>
   }
@@ -89,10 +94,6 @@ export default function PublicGame() {
     )
   }
 
-  const sortedTeams = useMemo(
-    () => sortTeams(teams, game?.team_sort),
-    [teams, game?.team_sort]
-  )
   const logoSrc = game?.logo_path ? logoUrl(game.logo_path) : null
   const showCenter = !!logoSrc && game?.logo_placement === 'center'
   const showTop = !!logoSrc && game?.logo_placement === 'top'
@@ -143,9 +144,13 @@ function Row({ team, index, flashKey, compact }) {
     : 'text-4xl sm:text-5xl md:text-7xl lg:text-8xl'
   return (
     <motion.div
+      layout="position"
       initial={{ opacity: 0, x: index % 2 === 0 ? -40 : 40 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 }}
+      transition={{
+        default: { type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 },
+        layout: { type: 'spring', stiffness: 260, damping: 26 },
+      }}
       className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-b-2 border-ink last:border-b-0 overflow-hidden`}
       style={{ background: team.color }}
     >

@@ -92,6 +92,11 @@ export default function GameScreen() {
     setBusy(false)
   }
 
+  const sortedTeams = useMemo(
+    () => sortTeams(teams, game?.team_sort),
+    [teams, game?.team_sort]
+  )
+
   if (loading) {
     return <div className="h-full grid place-items-center bg-cream font-display text-3xl animate-pulse">loading…</div>
   }
@@ -106,10 +111,6 @@ export default function GameScreen() {
     )
   }
 
-  const sortedTeams = useMemo(
-    () => sortTeams(teams, game?.team_sort),
-    [teams, game?.team_sort]
-  )
   const activeTeam = teams.find(t => t.id === active)
   const logoSrc = game.logo_path ? logoUrl(game.logo_path) : null
   const showCenter = !!logoSrc && game.logo_placement === 'center'
@@ -173,9 +174,13 @@ function TeamRow({ team, index, flashKey, onClick, compact }) {
   return (
     <motion.button
       onClick={onClick}
+      layout="position"
       initial={{ opacity: 0, x: index % 2 === 0 ? -40 : 40 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 }}
+      transition={{
+        default: { type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 },
+        layout: { type: 'spring', stiffness: 260, damping: 26 },
+      }}
       whileTap={{ scale: 0.995 }}
       className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-b-2 border-ink last:border-b-0 overflow-hidden text-left`}
       style={{ background: team.color }}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
@@ -1082,9 +1082,9 @@ function ColorPicker({ value, onChange }) {
 function tmp() { return 'tmp-' + Math.random().toString(36).slice(2, 9) }
 
 function PresetsSection({ presets, onChange }) {
-  // Map the integer array onto stable {id, value} items so Reorder.Item
-  // can key on identity (not value, which collides on edits/dupes).
-  // Sync from the prop whenever it changes from the outside (e.g. Reset).
+  // Map the integer array onto stable {id, value} items so each chip
+  // keeps its key across edits/dupes. Re-sync if the prop changes from
+  // the outside (e.g. Reset, undo, realtime).
   const idSeed = useRef(0)
   const [items, setItems] = useState(() =>
     presets.map(v => ({ id: `p-${idSeed.current++}`, value: v }))
@@ -1092,7 +1092,6 @@ function PresetsSection({ presets, onChange }) {
 
   useEffect(() => {
     setItems(prev => {
-      // If the prop matches the local items exactly, keep ids stable.
       if (prev.length === presets.length && prev.every((it, i) => it.value === presets[i])) {
         return prev
       }
@@ -1109,7 +1108,6 @@ function PresetsSection({ presets, onChange }) {
   const isDefault = items.length === DEFAULT_PRESETS.length
     && items.every((it, i) => it.value === DEFAULT_PRESETS[i])
 
-  const handleReorder = (next) => push(next)
   const handleAdd = (v) => {
     if (full) return
     push([...items, { id: `p-${idSeed.current++}`, value: v }])
@@ -1120,6 +1118,15 @@ function PresetsSection({ presets, onChange }) {
     if (idx === -1 || items[idx].value === v) return
     const next = items.slice()
     next[idx] = { ...next[idx], value: v }
+    push(next)
+  }
+  const handleMove = (id, dir) => {
+    const idx = items.findIndex(it => it.id === id)
+    if (idx === -1) return
+    const j = idx + dir
+    if (j < 0 || j >= items.length) return
+    const next = items.slice()
+    ;[next[idx], next[j]] = [next[j], next[idx]]
     push(next)
   }
   const handleReset = () =>
@@ -1141,24 +1148,23 @@ function PresetsSection({ presets, onChange }) {
         )}
       </div>
       <p className="text-xs text-ink/60 mb-3">
-        Shown in the popup when you tap a team. Type any whole number — use a minus sign for penalties. Drag the grip to rearrange.
+        Shown in the popup when you tap a team. Type any whole number — use a minus sign for penalties. Use the ◀ ▶ arrows to rearrange.
       </p>
 
-      <Reorder.Group
-        axis="x"
-        values={items}
-        onReorder={handleReorder}
-        as="div"
-        className="flex flex-wrap gap-2"
-      >
-        {items.map(item => (
-          <PresetChip
-            key={item.id}
-            item={item}
-            onCommit={(v) => handleUpdate(item.id, v)}
-            onRemove={() => handleRemove(item.id)}
-          />
-        ))}
+      <div className="flex flex-wrap gap-2">
+        <AnimatePresence initial={false}>
+          {items.map((item, i) => (
+            <PresetChip
+              key={item.id}
+              item={item}
+              isFirst={i === 0}
+              isLast={i === items.length - 1}
+              onCommit={(v) => handleUpdate(item.id, v)}
+              onRemove={() => handleRemove(item.id)}
+              onMove={(dir) => handleMove(item.id, dir)}
+            />
+          ))}
+        </AnimatePresence>
 
         <motion.button
           type="button"
@@ -1180,7 +1186,7 @@ function PresetsSection({ presets, onChange }) {
         >
           <span className="leading-none">−</span> penalty
         </motion.button>
-      </Reorder.Group>
+      </div>
 
       {items.length === 0 && (
         <p className="text-xs text-ink/60 mt-3">
@@ -1194,20 +1200,18 @@ function PresetsSection({ presets, onChange }) {
   )
 }
 
-function PresetChip({ item, onCommit, onRemove }) {
+function PresetChip({ item, isFirst, isLast, onCommit, onRemove, onMove }) {
   const { value } = item
   const [draft, setDraft] = useState(String(value))
-  const [dragging, setDragging] = useState(false)
-  const controls = useDragControls()
 
   useEffect(() => { setDraft(String(value)) }, [value])
 
   const parsed = parseInt(draft, 10)
   const previewPositive = Number.isFinite(parsed) ? parsed > 0 : value > 0
   const bg = previewPositive ? 'bg-candy-mint text-ink' : 'bg-candy-pink text-white'
-  const xHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
   const divider = previewPositive ? 'border-ink/20' : 'border-white/30'
-  const gripHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/15'
+  const ctrlHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
+  const xHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
 
   const commit = () => {
     const n = parseInt(draft, 10)
@@ -1219,28 +1223,26 @@ function PresetChip({ item, onCommit, onRemove }) {
   }
 
   return (
-    <Reorder.Item
-      value={item}
-      dragListener={false}
-      dragControls={controls}
-      onDragStart={() => setDragging(true)}
-      onDragEnd={() => setDragging(false)}
+    <motion.div
+      layout
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.85 }}
-      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-      whileDrag={{ scale: 1.06, rotate: -2, zIndex: 30 }}
-      className={`flex items-stretch rounded-xl border-2 border-ink overflow-hidden font-display font-bold shadow-chunk-sm select-none ${bg} ${dragging ? 'cursor-grabbing' : ''}`}
-      as="div"
+      transition={{
+        layout: { type: 'spring', stiffness: 380, damping: 28 },
+        default: { type: 'spring', stiffness: 320, damping: 22 },
+      }}
+      className={`flex items-stretch rounded-xl border-2 border-ink overflow-hidden font-display font-bold shadow-chunk-sm select-none ${bg}`}
     >
       <button
         type="button"
-        onPointerDown={(e) => { e.preventDefault(); controls.start(e) }}
-        className={`px-1.5 flex items-center border-r-2 ${divider} ${gripHover} transition cursor-grab active:cursor-grabbing touch-none`}
-        title="Drag to reorder"
-        aria-label="Drag to reorder"
+        onClick={() => onMove(-1)}
+        disabled={isFirst}
+        className={`px-1.5 flex items-center justify-center border-r-2 ${divider} ${ctrlHover} transition disabled:opacity-30 disabled:hover:bg-transparent`}
+        title="Move left"
+        aria-label="Move left"
       >
-        <GripIcon />
+        <ChevronIcon dir="left" />
       </button>
       <input
         type="number"
@@ -1256,27 +1258,30 @@ function PresetChip({ item, onCommit, onRemove }) {
       />
       <button
         type="button"
+        onClick={() => onMove(1)}
+        disabled={isLast}
+        className={`px-1.5 flex items-center justify-center border-l-2 ${divider} ${ctrlHover} transition disabled:opacity-30 disabled:hover:bg-transparent`}
+        title="Move right"
+        aria-label="Move right"
+      >
+        <ChevronIcon dir="right" />
+      </button>
+      <button
+        type="button"
         onClick={onRemove}
         className={`px-2 border-l-2 ${divider} ${xHover} text-sm transition`}
         title="Remove preset"
         aria-label="Remove preset"
       >×</button>
-    </Reorder.Item>
+    </motion.div>
   )
 }
 
-function GripIcon() {
+function ChevronIcon({ dir }) {
+  const d = dir === 'left' ? 'M7 2 L3 5 L7 8' : 'M3 2 L7 5 L3 8'
   return (
-    <svg
-      width="10" height="16" viewBox="0 0 6 10" aria-hidden
-      className="opacity-70"
-    >
-      <circle cx="1.5" cy="1.5" r="1" fill="currentColor" />
-      <circle cx="4.5" cy="1.5" r="1" fill="currentColor" />
-      <circle cx="1.5" cy="5"   r="1" fill="currentColor" />
-      <circle cx="4.5" cy="5"   r="1" fill="currentColor" />
-      <circle cx="1.5" cy="8.5" r="1" fill="currentColor" />
-      <circle cx="4.5" cy="8.5" r="1" fill="currentColor" />
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="opacity-80">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
