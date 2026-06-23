@@ -22,14 +22,14 @@ No spreadsheets. No napkins. No arguments. Just points, popping into existence.
 
 # Getting Started
 
-### Run it locally
+### Run it locally (dev)
 
 ```bash
 git clone <your fork>
 cd pointification
 npm install
 cp .env.example .env   # fill in VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-npm run dev
+npm run dev            # Vite dev server on http://localhost:5173
 ```
 
 ### Wire up the database
@@ -42,6 +42,29 @@ supabase db push
 ```
 
 …or paste the migrations under `supabase/migrations/` into the SQL editor by hand.
+
+# Self-hosting with Docker
+
+Pointification ships as a single container: a small Node server serves the built
+SPA and handles the two dynamic routes — `/api/og` for social-share images and
+`/p/:token` for rich link previews on shared scoreboards. Supabase stays a
+hosted/managed service; point the app at your project via env vars.
+
+```bash
+cp .env.example .env   # fill in your Supabase project values
+docker compose up --build
+# → http://localhost:3000
+```
+
+> The `VITE_*` values are inlined into the SPA at build time, so rebuild the
+> image (`docker compose up --build`) whenever they change.
+
+To run the production server without Docker:
+
+```bash
+npm run build
+npm start              # serves dist/ on http://localhost:3000
+```
 
 # License
 

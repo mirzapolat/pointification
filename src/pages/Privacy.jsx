@@ -48,16 +48,17 @@ export default function Privacy() {
 
         <Section title="Where the data is stored (Processors)">
           <p>
-            Pointification does not run its own servers. The service is hosted on
-            two SaaS platforms acting as processors on behalf of the operator:
+            The web application is self-hosted by the operator on a dedicated
+            server located in the European Union. The following processor is
+            also involved:
           </p>
           <ul className="list-disc list-inside space-y-1">
             <li>
-              <strong>Hosting:</strong> Vercel Inc. (
-              <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
-                vercel.com
+              <strong>Hosting:</strong> Hetzner Online GmbH (
+              <a href="https://www.hetzner.com/legal/privacy-policy" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
+                hetzner.com
               </a>
-              ) — delivers the web application and runs the serverless functions.
+              ) — provides the EU-based server that delivers the web application.
             </li>
             <li>
               <strong>Database &amp; authentication:</strong> Supabase Inc. (

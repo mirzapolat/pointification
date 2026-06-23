@@ -1,0 +1,41 @@
+# Pointification — single self-hosted container serving the SPA + dynamic routes.
+# Fronted by an external Traefik instance (TLS + routing managed outside this project).
+# Supabase itself is a hosted/managed service; configure it via the .env file
+# (compose reads .env in this directory automatically).
+#
+#   cp .env.example .env   # fill in your Supabase project values
+#   docker compose up --build -d
+
+services:
+  pointification:
+    build:
+      context: .
+      args:
+        # Inlined into the SPA bundle at build time (Vite).
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_DONATE_URL: ${VITE_DONATE_URL:-}
+    image: pointification
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Used by the server for /p/:token link previews (server-side reads).
+      SUPABASE_URL: ${VITE_SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    expose:
+      - "3000"
+    networks:
+      - home
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.pointification.rule: "Host(`pointification.de`)"
+      traefik.http.routers.pointification.entrypoints: websecure
+      traefik.http.routers.pointification.tls.certresolver: letsencrypt
+      traefik.http.routers.pointification.middlewares: secure-headers@file,compress@file
+      traefik.http.services.pointification.loadbalancer.server.port: "3000"
+    restart: unless-stopped
+
+# Joins the existing Traefik network (created/managed outside this project).
+networks:
+  home:
+    external: true
