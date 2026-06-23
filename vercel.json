@@ -1,6 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/p/:token", "destination": "/api/public-share?token=:token" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
-}
