@@ -6,6 +6,7 @@ import Welcome from './pages/Welcome.jsx'
 import Onboarding from './pages/Onboarding.jsx'
 import GameList from './pages/GameList.jsx'
 import GameScreen from './pages/GameScreen.jsx'
+import GameSettings from './pages/GameSettings.jsx'
 import Account from './pages/Account.jsx'
 import PublicGame from './pages/PublicGame.jsx'
 import GameLog from './pages/GameLog.jsx'
@@ -78,6 +79,8 @@ export default function App() {
         <Route path="/p/:token" element={<PublicGame />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/" element={<Home />} />
+        <Route path="/game/new" element={<Protected><GameSettings /></Protected>} />
+        <Route path="/game/:id/settings" element={<Protected><GameSettings /></Protected>} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
         <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
         <Route path="/game/:id/podium" element={<Protected><Podium /></Protected>} />

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { QRCodeSVG } from 'qrcode.react'
 import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
-import { useDialogs } from './Dialogs.jsx'
+import { useDialogs } from '../components/Dialogs.jsx'
 
 const DEFAULT_PRESETS = [5, 10, 15, -5, -10, -15]
 const MAX_PRESETS = 24
@@ -14,9 +16,59 @@ const SORT_OPTIONS = [
   { id: 'asc', label: 'Points ↑', hint: 'Lowest score on top' },
 ]
 
-// initial: null for new game, or full game object (with teams + user_id)
-export default function GameEditor({ initial, onClose, onSaved }) {
+// Route wrapper: loads the game for edit mode, then renders the tabbed form.
+// New-game mode (`/game/new`) skips the load and starts with a blank form.
+export default function GameSettings() {
+  const { id } = useParams()
+  const nav = useNavigate()
   const { user } = useAuth()
+  const isEdit = !!id
+
+  const [initial, setInitial] = useState(null)
+  const [loading, setLoading] = useState(isEdit)
+  const [notFound, setNotFound] = useState(false)
+
+  useEffect(() => {
+    if (!isEdit) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('games')
+        .select('id, name, user_id, is_public, public_token, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort, teams (id, name, color, score, position)')
+        .eq('id', id)
+        .single()
+      if (cancelled) return
+      if (error || !data) { setNotFound(true); setLoading(false); return }
+      data.teams = (data.teams ?? []).sort((a, b) => a.position - b.position)
+      setInitial(data)
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [id, isEdit])
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 grid place-items-center bg-cream font-display text-3xl animate-pulse">
+        loading…
+      </div>
+    )
+  }
+
+  if (notFound) {
+    return (
+      <div className="fixed inset-0 grid place-items-center bg-cream">
+        <div className="card-chunk p-8 text-center">
+          <h2 className="font-display text-3xl font-bold">Game not found</h2>
+          <button onClick={() => nav('/')} className="btn-chunk bg-candy-mint mt-4">← Back</button>
+        </div>
+      </div>
+    )
+  }
+
+  return <SettingsForm initial={isEdit ? initial : null} user={user} nav={nav} />
+}
+
+function SettingsForm({ initial, user, nav }) {
   const isEdit = !!initial
   const isOwner = !isEdit || initial.user_id === user?.id
   const instant = isEdit  // every change writes through immediately
@@ -47,8 +99,17 @@ export default function GameEditor({ initial, onClose, onSaved }) {
 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [tab, setTab] = useState('general')
 
   useEffect(() => () => { if (pendingPreview) URL.revokeObjectURL(pendingPreview) }, [pendingPreview])
+
+  const close = () => nav(isEdit ? -1 : '/')
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // --- Instant-apply primitives (edit mode) ---
   const patchGame = async (patch) => {
@@ -216,9 +277,9 @@ export default function GameEditor({ initial, onClose, onSaved }) {
   // --- New-game create flow (only used when isEdit === false) ---
   const create = async () => {
     setErr(null)
-    if (!name.trim()) return setErr('Name your game.')
-    if (teams.length < 1) return setErr('Add at least one team.')
-    if (teams.some(t => !t.name.trim())) return setErr('Every team needs a name.')
+    if (!name.trim()) { setTab('general'); return setErr('Name your game.') }
+    if (teams.length < 1) { setTab('teams'); return setErr('Add at least one team.') }
+    if (teams.some(t => !t.name.trim())) { setTab('teams'); return setErr('Every team needs a name.') }
 
     setBusy(true)
     try {
@@ -262,7 +323,8 @@ export default function GameEditor({ initial, onClose, onSaved }) {
           .insert({ game_id: gameId, name: t.name, color: t.color, position: i })
         if (error) throw error
       }
-      onSaved()
+      // Drop straight into the freshly created game.
+      nav(`/game/${gameId}`, { replace: true })
     } catch (e) {
       setErr(e.message ?? 'Something went wrong.')
     } finally {
@@ -270,104 +332,194 @@ export default function GameEditor({ initial, onClose, onSaved }) {
     }
   }
 
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Sharing/Members need a persisted game, so they're owner+edit only.
+  const tabs = [
+    { id: 'general', label: 'General' },
+    { id: 'teams', label: 'Teams' },
+    { id: 'scoring', label: 'Scoring' },
+    ...(isOwner ? [{ id: 'appearance', label: 'Appearance' }] : []),
+    ...(isEdit && isOwner ? [{ id: 'sharing', label: 'Sharing' }] : []),
+  ]
 
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-ink/40 backdrop-blur-sm p-0 md:p-4"
-      onClick={onClose}
+      className="fixed inset-0 bg-cream bg-grid flex flex-col"
     >
-      <motion.div
-        onClick={e => e.stopPropagation()}
-        initial={{ y: 60, opacity: 0, scale: 0.96 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 60, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 22 }}
-        className="card-chunk w-full md:max-w-2xl max-h-[92vh] overflow-y-auto no-scrollbar"
-      >
-        <div className="p-6 md:p-8">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-display text-3xl font-bold">
-              {isEdit ? 'Edit game' : 'New game'}
-              {isEdit && !isOwner && <span className="ml-2 text-sm font-semibold text-ink/60">(shared)</span>}
-            </h2>
-            <button onClick={onClose} className="w-10 h-10 rounded-2xl border-2 border-ink bg-white grid place-items-center font-bold">×</button>
+      {/* Top bar */}
+      <header className="shrink-0 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between gap-3 bg-cream/80 backdrop-blur border-b-2 border-ink z-20">
+        <button
+          onClick={close}
+          className="btn-chunk bg-white text-sm py-2 p-2 md:px-3"
+          aria-label={isEdit ? 'Back' : 'Cancel'}
+          title={isEdit ? 'Back' : 'Cancel'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+          <span className="hidden md:inline">{isEdit ? 'Back' : 'Cancel'}</span>
+        </button>
+        <div className="min-w-0 text-center flex-1">
+          <h1 className="font-display font-bold text-lg md:text-2xl truncate leading-none">
+            {isEdit ? (name || 'Settings') : 'New game'}
+          </h1>
+          <div className="text-xs md:text-sm text-ink/60 mt-0.5">
+            Settings{isEdit && !isOwner ? ' · shared' : ''}
           </div>
+        </div>
+        {isEdit ? (
+          <button onClick={close} className="btn-chunk bg-candy-mint text-sm py-2 px-3 md:px-4">
+            Done
+          </button>
+        ) : (
+          <button onClick={create} disabled={busy} className="btn-chunk bg-candy-mint text-sm py-2 px-3 md:px-4 disabled:opacity-60">
+            {busy ? 'Creating…' : 'Create'}
+          </button>
+        )}
+      </header>
 
-          <label className="block text-sm font-semibold mb-1">Game name</label>
-          <input
-            className="input-chunk mb-4"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onBlur={commitName}
-            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-            placeholder="Friday Quiz Night"
-            autoFocus={!isEdit}
-          />
+      {/* Tabs */}
+      <nav className="shrink-0 border-b-2 border-ink bg-cream/60 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1 px-3 md:px-8 py-2 w-max md:w-auto">
+          {tabs.map(t => {
+            const active = t.id === tab
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`px-3 md:px-4 py-2 rounded-xl border-2 font-display font-semibold text-sm transition whitespace-nowrap ${
+                  active
+                    ? 'border-ink bg-candy-yellow shadow-chunk-sm'
+                    : 'border-transparent text-ink/70 hover:text-ink hover:bg-white'
+                }`}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
 
-          <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+      {/* Content */}
+      <main className="flex-1 overflow-y-auto no-scrollbar">
+        <div className="max-w-2xl mx-auto px-4 md:px-8 py-6 md:py-8">
+          {tab === 'general' && (
             <div>
-              <label className="block text-sm font-semibold">Allow negative scores</label>
-              <p className="text-xs text-ink/60">When off, scores can't go below zero.</p>
-            </div>
-            <button
-              type="button"
-              onClick={toggleNegative}
-              aria-pressed={allowNegative}
-              className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors ${allowNegative ? 'bg-candy-mint' : 'bg-white'}`}
-            >
-              <motion.span
-                layout
-                transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                className="absolute top-0.5 w-6 h-6 rounded-full bg-ink"
-                style={{ left: allowNegative ? 'calc(100% - 26px)' : '2px' }}
+              <label className="block text-sm font-semibold mb-1">Game name</label>
+              <input
+                className="input-chunk mb-6"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                placeholder="Friday Quiz Night"
+                autoFocus={!isEdit}
               />
-            </button>
-          </div>
 
-          <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
-            <div className="flex items-baseline justify-between gap-3 mb-2">
-              <label className="block text-sm font-semibold">Team order</label>
-              <span className="text-xs text-ink/60 truncate">
-                {SORT_OPTIONS.find(o => o.id === teamSort)?.hint}
-              </span>
+              <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+                <div>
+                  <label className="block text-sm font-semibold">Allow negative scores</label>
+                  <p className="text-xs text-ink/60">When off, scores can't go below zero.</p>
+                </div>
+                <Toggle on={allowNegative} onClick={toggleNegative} />
+              </div>
+
+              <div className="p-3 rounded-2xl border-2 border-dashed border-ink/20">
+                <div className="flex items-baseline justify-between gap-3 mb-2">
+                  <label className="block text-sm font-semibold">Team order</label>
+                  <span className="text-xs text-ink/60 truncate">
+                    {SORT_OPTIONS.find(o => o.id === teamSort)?.hint}
+                  </span>
+                </div>
+                <div
+                  role="radiogroup"
+                  aria-label="Team order"
+                  className="grid grid-cols-3 gap-1 p-1 rounded-2xl border-2 border-ink bg-white"
+                >
+                  {SORT_OPTIONS.map(opt => {
+                    const active = opt.id === teamSort
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => commitTeamSort(opt.id)}
+                        className={`px-2 py-2 rounded-xl font-display font-semibold text-sm transition ${
+                          active ? 'bg-candy-mint text-ink shadow-chunk-sm' : 'text-ink/70 hover:text-ink hover:bg-cream'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
-            <div
-              role="radiogroup"
-              aria-label="Team order"
-              className="grid grid-cols-3 gap-1 p-1 rounded-2xl border-2 border-ink bg-white"
-            >
-              {SORT_OPTIONS.map(opt => {
-                const active = opt.id === teamSort
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => commitTeamSort(opt.id)}
-                    className={`px-2 py-2 rounded-xl font-display font-semibold text-sm transition ${
-                      active ? 'bg-candy-mint text-ink shadow-chunk-sm' : 'text-ink/70 hover:text-ink hover:bg-cream'
-                    }`}
+          )}
+
+          {tab === 'teams' && (
+            <div>
+              <label className="block text-sm font-semibold mb-2">Teams</label>
+              <div className="space-y-2">
+                {teams.map((t, i) => (
+                  <motion.div
+                    key={t.id}
+                    layout
+                    initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+                    className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-cream"
                   >
-                    {opt.label}
-                  </button>
-                )
-              })}
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => moveTeam(i, -1)}
+                        disabled={i === 0 || teamSort !== 'manual'}
+                        className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
+                        title={teamSort === 'manual' ? 'Move up' : 'Sorted by points — switch to Manual to reorder'}
+                        aria-label="Move up"
+                      >▲</button>
+                      <button
+                        type="button"
+                        onClick={() => moveTeam(i, 1)}
+                        disabled={i === teams.length - 1 || teamSort !== 'manual'}
+                        className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
+                        title={teamSort === 'manual' ? 'Move down' : 'Sorted by points — switch to Manual to reorder'}
+                        aria-label="Move down"
+                      >▼</button>
+                    </div>
+                    <ColorPicker value={t.color} onChange={c => updateTeam(t.id, { color: c })} />
+                    <input
+                      className="flex-1 px-3 py-2 rounded-xl border-2 border-ink bg-white outline-none font-medium"
+                      value={t.name}
+                      onChange={e => setTeams(ts => ts.map(x => x.id === t.id ? { ...x, name: e.target.value } : x))}
+                      onBlur={e => commitTeamName(t.id, e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                      placeholder={`Team ${i + 1}`}
+                    />
+                    <button
+                      onClick={() => removeTeam(t.id)}
+                      className="w-10 h-10 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white font-bold transition"
+                      title="Remove"
+                    >×</button>
+                  </motion.div>
+                ))}
+                <motion.button
+                  type="button"
+                  layout
+                  onClick={addTeam}
+                  className="w-full flex items-center justify-center gap-2 p-2 rounded-2xl border-2 border-dashed border-ink/30 bg-cream/40 text-ink/60 hover:bg-candy-yellow hover:border-ink hover:text-ink font-display font-semibold transition"
+                >
+                  <span className="text-lg leading-none">+</span> Add team
+                </motion.button>
+              </div>
             </div>
-          </div>
+          )}
 
-          <PresetsSection
-            presets={presets}
-            onChange={commitPresets}
-          />
+          {tab === 'scoring' && (
+            <PresetsSection presets={presets} onChange={commitPresets} />
+          )}
 
-          {isOwner && (
+          {tab === 'appearance' && isOwner && (
             <LogoSection
               logoPath={logoPath}
               placement={logoPlacement}
@@ -384,87 +536,40 @@ export default function GameEditor({ initial, onClose, onSaved }) {
             />
           )}
 
-          <label className="block text-sm font-semibold mb-2">Teams</label>
-
-          <div className="space-y-2">
-            {teams.map((t, i) => (
-              <motion.div
-                key={t.id}
-                layout
-                initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-                className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-cream"
-              >
-                <div className="flex flex-col gap-0.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => moveTeam(i, -1)}
-                    disabled={i === 0 || teamSort !== 'manual'}
-                    className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
-                    title={teamSort === 'manual' ? 'Move up' : 'Sorted by points — switch to Manual to reorder'}
-                    aria-label="Move up"
-                  >▲</button>
-                  <button
-                    type="button"
-                    onClick={() => moveTeam(i, 1)}
-                    disabled={i === teams.length - 1 || teamSort !== 'manual'}
-                    className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
-                    title={teamSort === 'manual' ? 'Move down' : 'Sorted by points — switch to Manual to reorder'}
-                    aria-label="Move down"
-                  >▼</button>
-                </div>
-                <ColorPicker value={t.color} onChange={c => updateTeam(t.id, { color: c })} />
-                <input
-                  className="flex-1 px-3 py-2 rounded-xl border-2 border-ink bg-white outline-none font-medium"
-                  value={t.name}
-                  onChange={e => setTeams(ts => ts.map(x => x.id === t.id ? { ...x, name: e.target.value } : x))}
-                  onBlur={e => commitTeamName(t.id, e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                  placeholder={`Team ${i + 1}`}
-                />
-                <button
-                  onClick={() => removeTeam(t.id)}
-                  className="w-10 h-10 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white font-bold transition"
-                  title="Remove"
-                >×</button>
-              </motion.div>
-            ))}
-            <motion.button
-              type="button"
-              layout
-              onClick={addTeam}
-              className="w-full flex items-center justify-center gap-2 p-2 rounded-2xl border-2 border-dashed border-ink/30 bg-cream/40 text-ink/60 hover:bg-candy-yellow hover:border-ink hover:text-ink font-display font-semibold transition"
-            >
-              <span className="text-lg leading-none">+</span> Add team
-            </motion.button>
-          </div>
-
-          {isEdit && isOwner && <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} />}
-          {isEdit && isOwner && <MembersSection gameId={initial.id} />}
+          {tab === 'sharing' && isEdit && isOwner && (
+            <div>
+              <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} />
+              <MembersSection gameId={initial.id} />
+            </div>
+          )}
 
           {err && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="mt-4 px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/70 text-sm">
+              className="mt-6 px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/70 text-sm">
               {err}
             </motion.div>
           )}
-
-          <div className="flex gap-2 mt-6">
-            {isEdit ? (
-              <button onClick={onClose} className="btn-chunk bg-candy-mint flex-1 text-lg">
-                Done
-              </button>
-            ) : (
-              <>
-                <button onClick={onClose} className="btn-chunk bg-white flex-1">Cancel</button>
-                <button onClick={create} disabled={busy} className="btn-chunk bg-candy-mint flex-1 text-lg disabled:opacity-60">
-                  {busy ? 'Creating…' : 'Create game'}
-                </button>
-              </>
-            )}
-          </div>
         </div>
-      </motion.div>
+      </main>
     </motion.div>
+  )
+}
+
+function Toggle({ on, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors ${on ? 'bg-candy-mint' : 'bg-white'}`}
+    >
+      <motion.span
+        layout
+        transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+        className="absolute top-0.5 w-6 h-6 rounded-full bg-ink"
+        style={{ left: on ? 'calc(100% - 26px)' : '2px' }}
+      />
+    </button>
   )
 }
 
@@ -489,7 +594,7 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
   }
 
   return (
-    <div className="mb-6">
+    <div>
       <label className="block text-sm font-semibold mb-1">Logo</label>
       <p className="text-xs text-ink/60 mb-2">PNG, JPG, or SVG. Under 2MB.</p>
 
@@ -795,7 +900,7 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
   }
 
   return (
-    <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
+    <div>
       <div className="flex items-center justify-between mb-3">
         <div>
           <label className="block text-sm font-semibold">Public link</label>
@@ -826,19 +931,34 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col sm:flex-row gap-2 pt-2 pr-2 pb-2">
-              <input
-                readOnly
-                value={url}
-                onFocus={e => e.target.select()}
-                className="input-chunk flex-1 font-mono text-sm bg-candy-yellow/40"
-              />
-              <button type="button" onClick={copy} className="btn-chunk bg-white">
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-              <button type="button" onClick={rotate} disabled={busy} className="btn-chunk bg-candy-pink text-white disabled:opacity-60">
-                Regenerate
-              </button>
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 pr-2 pb-2">
+              <div className="shrink-0 self-center sm:self-start p-2.5 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm">
+                <QRCodeSVG
+                  value={url}
+                  size={132}
+                  bgColor="#ffffff"
+                  fgColor="#0F0F12"
+                  level="M"
+                  marginSize={0}
+                />
+                <p className="mt-1.5 text-center text-[11px] font-semibold text-ink/60">Scan to watch</p>
+              </div>
+              <div className="flex-1 flex flex-col gap-2">
+                <input
+                  readOnly
+                  value={url}
+                  onFocus={e => e.target.select()}
+                  className="input-chunk font-mono text-sm bg-candy-yellow/40"
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={copy} className="btn-chunk bg-white flex-1">
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button type="button" onClick={rotate} disabled={busy} className="btn-chunk bg-candy-pink text-white flex-1 disabled:opacity-60">
+                    Regenerate
+                  </button>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1133,7 +1253,7 @@ function PresetsSection({ presets, onChange }) {
     push(DEFAULT_PRESETS.map(v => ({ id: `p-${idSeed.current++}`, value: v })))
 
   return (
-    <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+    <div className="p-3 rounded-2xl border-2 border-dashed border-ink/20">
       <div className="flex items-baseline justify-between gap-3 mb-1">
         <label className="block text-sm font-semibold">Quick point buttons</label>
         {!isDefault && (

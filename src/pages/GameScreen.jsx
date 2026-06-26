@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
@@ -15,7 +15,30 @@ export default function GameScreen() {
   const [active, setActive] = useState(null) // team id with popup open
   const [flash, setFlash] = useState({})     // { [teamId]: +n or -n }
   const [busy, setBusy] = useState(false)
+  const [undoArmed, setUndoArmed] = useState(false) // first tap arms, second confirms
+  const [undoBusy, setUndoBusy] = useState(false)
+  const undoTimer = useRef(null)
   const dialogs = useDialogs()
+
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current) }, [])
+
+  const handleUndo = async () => {
+    if (!undoArmed) {
+      // First tap: arm, then auto-disarm if not confirmed shortly.
+      setUndoArmed(true)
+      if (undoTimer.current) clearTimeout(undoTimer.current)
+      undoTimer.current = setTimeout(() => setUndoArmed(false), 3000)
+      return
+    }
+    // Second tap: confirm.
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setUndoArmed(false)
+    setUndoBusy(true)
+    const { error } = await supabase.rpc('undo_last_point_change', { p_game_id: id })
+    setUndoBusy(false)
+    if (error) dialogs.alert({ title: 'Could not undo', message: error.message })
+    // Score + log update arrive via realtime.
+  }
 
   const load = async () => {
     const [{ data: g }, { data: t }] = await Promise.all([
@@ -123,7 +146,33 @@ export default function GameScreen() {
       <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
         <button onClick={() => nav('/')} className="btn-chunk bg-white text-sm py-2 px-3">← Games</button>
         <h1 className="font-display font-bold text-xl md:text-2xl truncate px-3">{game.name}</h1>
-        <div className="text-sm text-ink/60 hidden md:block">{teams.length} {teams.length === 1 ? 'team' : 'teams'}</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleUndo}
+            disabled={undoBusy}
+            className={`btn-chunk text-sm py-2 p-2 md:px-3 inline-flex items-center gap-2 transition-colors disabled:opacity-60 ${undoArmed ? 'bg-candy-pink text-white' : 'bg-white'}`}
+            aria-label={undoArmed ? 'Confirm undo' : 'Undo last point change'}
+            title={undoArmed ? 'Tap again to confirm' : 'Undo last point change'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+            <span className={undoArmed ? 'inline' : 'hidden md:inline'}>{undoArmed ? 'Confirm?' : 'Undo'}</span>
+          </button>
+          <button
+            onClick={() => nav(`/game/${id}/settings`)}
+            className="btn-chunk bg-white text-sm py-2 p-2 md:px-3 inline-flex items-center gap-2"
+            aria-label="Game settings"
+            title="Game settings"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span className="hidden md:inline">Settings</span>
+          </button>
+        </div>
       </header>
 
       {/* fill remaining */}

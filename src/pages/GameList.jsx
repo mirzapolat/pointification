@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
-import GameEditor from '../components/GameEditor.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
 
@@ -17,9 +16,9 @@ const FILTERS = [
 export default function GameList() {
   const { user, signOut } = useAuth()
   const dialogs = useDialogs()
+  const nav = useNavigate()
   const [games, setGames] = useState([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState(null)
   const [filter, setFilter] = useState('all')
 
   const load = async () => {
@@ -188,7 +187,7 @@ export default function GameList() {
               {visible.length === 0 && !allowCreate ? (
                 <EmptyForFilter filter={filter} />
               ) : visible.length === 0 && allowCreate ? (
-                <EmptyState filter={filter} onCreate={() => setEditing('new')} />
+                <EmptyState filter={filter} onCreate={() => nav('/game/new')} />
               ) : (
                 <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   <AnimatePresence mode="popLayout">
@@ -200,14 +199,14 @@ export default function GameList() {
                           game={g}
                           i={i}
                           isOwner={isOwner}
-                          onEdit={() => setEditing(g)}
+                          onEdit={() => nav(`/game/${g.id}/settings`)}
                           onArchive={isOwner ? () => archive(g) : null}
                           onDelete={() => isOwner ? remove(g) : leave(g)}
                         />
                       )
                     })}
                     {allowCreate && (
-                      <NewGameCard key="__new" i={visible.length} onCreate={() => setEditing('new')} />
+                      <NewGameCard key="__new" i={visible.length} onCreate={() => nav('/game/new')} />
                     )}
                   </AnimatePresence>
                 </motion.div>
@@ -216,16 +215,6 @@ export default function GameList() {
           )}
         </main>
       </div>
-
-      <AnimatePresence>
-        {editing && (
-          <GameEditor
-            initial={editing === 'new' ? null : editing}
-            onClose={() => setEditing(null)}
-            onSaved={() => { setEditing(null); load() }}
-          />
-        )}
-      </AnimatePresence>
     </motion.div>
   )
 }
@@ -513,7 +502,7 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
         </div>
       </Link>
       <div className="flex border-t-2 border-ink">
-        <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Edit</button>
+        <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Settings</button>
         <div className="w-[2px] bg-ink" />
         <Link to={`/game/${game.id}/log`} className="flex-1 py-2.5 font-display font-semibold text-center hover:bg-candy-mint transition">Details</Link>
         {onArchive && (
