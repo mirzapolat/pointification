@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -437,7 +437,7 @@ function EmptyForFilter({ filter }) {
   )
 }
 
-function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
+const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }, ref) {
   const accent = TEAM_PALETTE[i % TEAM_PALETTE.length]
   const teams = game.teams ?? []
   const isArchived = !!game.archived_at
@@ -449,6 +449,7 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
   }
   return (
     <motion.div
+      ref={ref}
       layout
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -550,7 +551,7 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
       )}
     </motion.div>
   )
-}
+})
 
 function ContextMenu({ x, y, onClose, children }) {
   const ref = useRef(null)
@@ -623,9 +624,10 @@ function MenuButton({ onClick, hover, icon, label }) {
   )
 }
 
-function NewGameCard({ i, onCreate }) {
+const NewGameCard = forwardRef(function NewGameCard({ i, onCreate }, ref) {
   return (
     <motion.button
+      ref={ref}
       layout
       onClick={onCreate}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -640,7 +642,7 @@ function NewGameCard({ i, onCreate }) {
       <p className="text-ink/60 text-sm mt-1">Start tracking points</p>
     </motion.button>
   )
-}
+})
 
 function EmptyState({ filter, onCreate }) {
   const title = filter === 'mine' ? "You don't own any games yet" : 'No games yet'

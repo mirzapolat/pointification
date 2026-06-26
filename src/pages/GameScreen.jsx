@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
@@ -17,8 +18,60 @@ export default function GameScreen() {
   const [busy, setBusy] = useState(false)
   const [undoArmed, setUndoArmed] = useState(false) // first tap arms, second confirms
   const [undoBusy, setUndoBusy] = useState(false)
+  const [rounds, setRounds] = useState([])
+  const [roundNet, setRoundNet] = useState({}) // { [teamId]: net delta within active round }
+  const [roundMenu, setRoundMenu] = useState(null) // { left, top, width } | null
+  const [isWide, setIsWide] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches)
+  const roundBtnRef = useRef(null)
   const undoTimer = useRef(null)
   const dialogs = useDialogs()
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const on = () => setIsWide(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+
+  const openRoundMenu = () => {
+    if (roundMenu) { setRoundMenu(null); return }
+    const r = roundBtnRef.current?.getBoundingClientRect()
+    if (!r) return
+    const width = Math.max(220, r.width)
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8))
+    setRoundMenu({ left, top: r.bottom + 6, width })
+  }
+
+  useEffect(() => {
+    if (!roundMenu) return
+    const onDown = (e) => {
+      if (roundBtnRef.current?.contains(e.target)) return
+      if (e.target.closest?.('[data-round-menu]')) return
+      setRoundMenu(null)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setRoundMenu(null) }
+    const onScroll = () => setRoundMenu(null)
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [roundMenu])
+
+  // Recompute the active round's per-team net from the logs. Kept in a ref so
+  // the realtime callbacks always call the latest closure without resubscribing.
+  const recomputeNetsRef = useRef(() => {})
+  recomputeNetsRef.current = async () => {
+    const rid = game?.current_round_id
+    if (!game?.rounds_enabled || !rid) { setRoundNet({}); return }
+    const { data } = await supabase.from('point_logs').select('team_id, delta').eq('game_id', id).eq('round_id', rid)
+    const m = {}
+    for (const r of data ?? []) m[r.team_id] = (m[r.team_id] ?? 0) + r.delta
+    setRoundNet(m)
+  }
 
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current) }, [])
 
@@ -41,16 +94,47 @@ export default function GameScreen() {
   }
 
   const load = async () => {
-    const [{ data: g }, { data: t }] = await Promise.all([
-      supabase.from('games').select('id, name, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort').eq('id', id).single(),
-      supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position')
+    const [{ data: g }, { data: t }, { data: r }] = await Promise.all([
+      supabase.from('games').select('id, name, allow_negative, rounds_enabled, current_round_id, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort').eq('id', id).single(),
+      supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position'),
+      supabase.from('rounds').select('id, name, position').eq('game_id', id).order('position'),
     ])
     setGame(g ?? null)
     setTeams(t ?? [])
+    setRounds(r ?? [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [id])
+
+  // Recompute round nets whenever the active round (or the feature) changes.
+  useEffect(() => { recomputeNetsRef.current() }, [game?.current_round_id, game?.rounds_enabled])
+
+  // If rounds are on but no active round is set, default to the first one.
+  useEffect(() => {
+    if (game?.rounds_enabled && !game.current_round_id && rounds.length) {
+      const first = [...rounds].sort((a, b) => a.position - b.position)[0]
+      setCurrentRound(first.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.rounds_enabled, game?.current_round_id, rounds])
+
+  const setCurrentRound = async (roundId) => {
+    setGame(g => g ? { ...g, current_round_id: roundId } : g)
+    const { error } = await supabase.from('games').update({ current_round_id: roundId }).eq('id', id)
+    if (error) dialogs.alert({ title: 'Could not switch round', message: error.message })
+  }
+
+  const addRound = async () => {
+    const pos = rounds.length
+    const { data, error } = await supabase.from('rounds')
+      .insert({ game_id: id, name: `Round ${pos + 1}`, position: pos })
+      .select('id, name, position')
+      .single()
+    if (error) { dialogs.alert({ title: 'Could not add round', message: error.message }); return }
+    setRounds(rs => rs.some(r => r.id === data.id) ? rs : [...rs, data])
+    setCurrentRound(data.id)
+  }
 
   // Realtime: keep scores, team list, and game metadata in sync across viewers.
   useEffect(() => {
@@ -67,6 +151,8 @@ export default function GameScreen() {
             // Flash only if score actually changed (not, e.g., rename)
             if (payload.new.score !== prevScore) {
               setFlash(f => ({ ...f, [payload.new.id]: (f[payload.new.id] ?? 0) + 1 }))
+              // A score moved → the active round's nets may have changed.
+              recomputeNetsRef.current()
             }
             return next
           })
@@ -90,6 +176,17 @@ export default function GameScreen() {
       .on('postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'games', filter: `id=eq.${id}` },
         () => nav('/', { replace: true }))
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'rounds', filter: `game_id=eq.${id}` },
+        (payload) => setRounds(prev => prev.some(r => r.id === payload.new.id)
+          ? prev
+          : [...prev, payload.new].sort((a, b) => a.position - b.position)))
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rounds', filter: `game_id=eq.${id}` },
+        (payload) => setRounds(prev => prev.map(r => r.id === payload.new.id ? { ...r, ...payload.new } : r).sort((a, b) => a.position - b.position)))
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'rounds', filter: `game_id=eq.${id}` },
+        (payload) => setRounds(prev => prev.filter(r => r.id !== payload.old.id)))
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [id, nav])
@@ -111,6 +208,10 @@ export default function GameScreen() {
     if (error) {
       setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score: t.score - effective } : t))
       dialogs.alert({ title: 'Could not apply', message: error.message })
+    } else {
+      // We updated the score optimistically, so the realtime echo won't trigger
+      // a net recompute for this client — do it explicitly.
+      recomputeNetsRef.current()
     }
     setBusy(false)
   }
@@ -139,13 +240,54 @@ export default function GameScreen() {
   const showCenter = !!logoSrc && game.logo_placement === 'center'
   const showTop = !!logoSrc && game.logo_placement === 'top'
 
+  const roundsOn = !!game.rounds_enabled
+  const orderedRounds = [...rounds].sort((a, b) => a.position - b.position)
+  const curIdx = orderedRounds.findIndex(r => r.id === game.current_round_id)
+  const curRound = curIdx >= 0 ? orderedRounds[curIdx] : null
+
+  const roundControls = (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => curIdx > 0 && setCurrentRound(orderedRounds[curIdx - 1].id)}
+        disabled={curIdx <= 0}
+        className="w-9 h-9 grid place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
+        aria-label="Previous round"
+        title="Previous round"
+      >‹</button>
+      <button
+        ref={roundBtnRef}
+        onClick={openRoundMenu}
+        aria-haspopup="menu"
+        aria-expanded={!!roundMenu}
+        className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-[8.5rem] text-center truncate hover:bg-candy-yellow transition inline-flex items-center justify-center gap-1.5"
+        title="Switch round"
+      >
+        <span className="truncate">{curRound?.name || 'Round'}</span>
+        <span className="text-ink/50 shrink-0">({curIdx >= 0 ? curIdx + 1 : '–'}/{orderedRounds.length})</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-transform ${roundMenu ? 'rotate-180' : ''}`}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <button
+        onClick={() => curIdx >= 0 && curIdx < orderedRounds.length - 1 && setCurrentRound(orderedRounds[curIdx + 1].id)}
+        disabled={curIdx < 0 || curIdx >= orderedRounds.length - 1}
+        className="w-9 h-9 grid place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
+        aria-label="Next round"
+        title="Next round"
+      >›</button>
+    </div>
+  )
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 flex flex-col bg-ink">
       {/* top bar */}
-      <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
-        <button onClick={() => nav('/')} className="btn-chunk bg-white text-sm py-2 px-3">← Games</button>
-        <h1 className="font-display font-bold text-xl md:text-2xl truncate px-3">{game.name}</h1>
+      <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between gap-3 bg-cream border-b-2 border-ink z-10">
+        <button onClick={() => nav('/')} className="btn-chunk bg-white text-sm py-2 px-3 shrink-0">← Games</button>
+        <div className="flex items-center gap-3 min-w-0 flex-1 justify-center">
+          <h1 className="font-display font-bold text-xl md:text-2xl truncate">{game.name}</h1>
+          {roundsOn && isWide && <div className="shrink-0">{roundControls}</div>}
+        </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleUndo}
@@ -175,6 +317,52 @@ export default function GameScreen() {
         </div>
       </header>
 
+      {/* round switcher — its own bar on narrow screens, in the header otherwise */}
+      {roundsOn && !isWide && (
+        <div className="shrink-0 px-3 py-2 flex items-center justify-center bg-cream border-b-2 border-ink z-10">
+          {roundControls}
+        </div>
+      )}
+
+      {roundMenu && createPortal(
+        <motion.div
+          data-round-menu
+          initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.1 }}
+          role="menu"
+          style={{ position: 'fixed', left: roundMenu.left, top: roundMenu.top, width: roundMenu.width }}
+          className="z-[120] p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk max-h-[60vh] overflow-y-auto no-scrollbar"
+        >
+          {orderedRounds.map((r, i) => {
+            const isCur = r.id === game.current_round_id
+            return (
+              <button
+                key={r.id}
+                type="button"
+                role="menuitem"
+                onClick={() => { setRoundMenu(null); if (!isCur) setCurrentRound(r.id) }}
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm transition ${isCur ? 'bg-candy-yellow' : 'hover:bg-cream'}`}
+              >
+                <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white text-xs tabular-nums">{i + 1}</span>
+                <span className="truncate flex-1">{r.name || `Round ${i + 1}`}</span>
+                {isCur && <span className="shrink-0 text-xs text-ink/50">current</span>}
+              </button>
+            )
+          })}
+          <div className="my-1 border-t-2 border-dashed border-ink/15" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setRoundMenu(null); addRound() }}
+            className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm text-ink hover:bg-candy-mint transition"
+          >
+            <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white text-base leading-none">+</span>
+            Add round
+          </button>
+        </motion.div>,
+        document.body
+      )}
+
       {/* fill remaining */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {showTop && <LogoTopRow src={logoSrc} />}
@@ -188,6 +376,8 @@ export default function GameScreen() {
             flashKey={flash[t.id] ?? 0}
             onClick={() => setActive(t.id)}
             compact={showCenter}
+            showRound={roundsOn}
+            roundDelta={roundNet[t.id] ?? 0}
           />
         ))}
         {showCenter && <LogoCenterBadge src={logoSrc} shape={game.logo_shape} scale={game.logo_scale} />}
@@ -208,7 +398,7 @@ export default function GameScreen() {
   )
 }
 
-function TeamRow({ team, index, flashKey, onClick, compact }) {
+function TeamRow({ team, index, flashKey, onClick, compact, showRound, roundDelta }) {
   // In compact mode, leave a clear gutter around the centered logo so the
   // big team name / score don't slide under the bubble.
   const padX = compact
@@ -252,10 +442,26 @@ function TeamRow({ team, index, flashKey, onClick, compact }) {
           {team.name}
         </h2>
       </div>
-      <div className={`relative z-10 font-display font-bold tabular-nums ${scoreSize}`}>
-        <AnimatedNumber value={team.score} />
+      <div className="relative z-10 flex flex-col items-end gap-1">
+        {showRound && roundDelta !== 0 && <RoundChip delta={roundDelta} />}
+        <div className={`font-display font-bold tabular-nums ${scoreSize}`}>
+          <AnimatedNumber value={team.score} />
+        </div>
       </div>
     </motion.button>
+  )
+}
+
+function RoundChip({ delta }) {
+  const up = delta > 0
+  const down = delta < 0
+  const cls = up ? 'bg-candy-mint text-ink' : down ? 'bg-candy-pink text-white' : 'bg-white/85 text-ink/60'
+  const arrow = up ? '▲' : down ? '▼' : '–'
+  const num = up ? `+${delta}` : down ? `${delta}` : '0'
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border-2 border-ink font-display font-bold text-xs md:text-sm tabular-nums shadow-chunk-sm ${cls}`}>
+      <span className="leading-none text-[0.7em]">{arrow}</span>{num}
+    </span>
   )
 }
 

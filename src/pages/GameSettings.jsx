@@ -28,6 +28,7 @@ export default function GameSettings() {
   const [initial, setInitial] = useState(null)
   const [loading, setLoading] = useState(isEdit)
   const [notFound, setNotFound] = useState(false)
+  const [loadErr, setLoadErr] = useState(null)
 
   useEffect(() => {
     if (!isEdit) return
@@ -35,12 +36,20 @@ export default function GameSettings() {
     ;(async () => {
       const { data, error } = await supabase
         .from('games')
-        .select('id, name, user_id, is_public, public_token, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort, teams (id, name, color, score, position)')
+        .select('id, name, user_id, is_public, public_token, allow_negative, rounds_enabled, current_round_id, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort, teams (id, name, color, score, position), rounds!rounds_game_id_fkey (id, name, position)')
         .eq('id', id)
         .single()
       if (cancelled) return
-      if (error || !data) { setNotFound(true); setLoading(false); return }
+      if (error) {
+        // PGRST116 = no row matched (genuinely missing / no access).
+        if (error.code === 'PGRST116') setNotFound(true)
+        else setLoadErr(error.message)
+        setLoading(false)
+        return
+      }
+      if (!data) { setNotFound(true); setLoading(false); return }
       data.teams = (data.teams ?? []).sort((a, b) => a.position - b.position)
+      data.rounds = (data.rounds ?? []).sort((a, b) => a.position - b.position)
       setInitial(data)
       setLoading(false)
     })()
@@ -55,11 +64,12 @@ export default function GameSettings() {
     )
   }
 
-  if (notFound) {
+  if (notFound || loadErr) {
     return (
       <div className="fixed inset-0 grid place-items-center bg-cream">
-        <div className="card-chunk p-8 text-center">
-          <h2 className="font-display text-3xl font-bold">Game not found</h2>
+        <div className="card-chunk p-8 text-center max-w-md">
+          <h2 className="font-display text-3xl font-bold">{notFound ? 'Game not found' : 'Could not load settings'}</h2>
+          {loadErr && <p className="text-ink/60 text-sm mt-2">{loadErr}</p>}
           <button onClick={() => nav('/')} className="btn-chunk bg-candy-mint mt-4">← Back</button>
         </div>
       </div>
@@ -87,6 +97,11 @@ function SettingsForm({ initial, user, nav }) {
       ? initial.teams.map(t => ({ ...t }))
       : [{ id: tmp(), name: 'Team 1', color: TEAM_PALETTE[0] }, { id: tmp(), name: 'Team 2', color: TEAM_PALETTE[1] }]
   )
+
+  // Rounds (optional feature)
+  const [roundsEnabled, setRoundsEnabled] = useState(!!initial?.rounds_enabled)
+  const [rounds, setRounds] = useState(initial?.rounds ? initial.rounds.map(r => ({ ...r })) : [])
+  const [currentRoundId, setCurrentRoundId] = useState(initial?.current_round_id ?? null)
 
   // Logo state
   const [logoPath, setLogoPath] = useState(initial?.logo_path ?? null)
@@ -198,6 +213,81 @@ function SettingsForm({ initial, user, nav }) {
       if (!String(b.id).startsWith('tmp-')) {
         await supabase.from('teams').update({ position: j }).eq('id', b.id)
       }
+    }
+  }
+
+  // --- Rounds handlers ---
+  const toggleRounds = async () => {
+    const next = !roundsEnabled
+    setRoundsEnabled(next)
+    if (!instant) {
+      // New-game flow: seed a first round locally so the list isn't empty.
+      if (next && rounds.length === 0) setRounds([{ id: tmp(), name: 'Round 1', position: 0 }])
+      return
+    }
+    if (next && rounds.length === 0) {
+      // Ensure an enabled game always has at least one round to score into.
+      const { data, error } = await supabase.from('rounds')
+        .insert({ game_id: initial.id, name: 'Round 1', position: 0 })
+        .select('id, name, position')
+        .single()
+      if (error) { setErr(error.message); setRoundsEnabled(!next); return }
+      setRounds([data])
+      setCurrentRoundId(data.id)
+      await patchGame({ rounds_enabled: true, current_round_id: data.id })
+    } else {
+      await patchGame({ rounds_enabled: next })
+    }
+  }
+
+  const addRound = async () => {
+    const newName = `Round ${rounds.length + 1}`
+    if (instant) {
+      const { data, error } = await supabase.from('rounds')
+        .insert({ game_id: initial.id, name: newName, position: rounds.length })
+        .select('id, name, position')
+        .single()
+      if (error) { setErr(error.message); return }
+      setRounds(rs => [...rs, data])
+      if (!currentRoundId) { setCurrentRoundId(data.id); await patchGame({ current_round_id: data.id }) }
+    } else {
+      setRounds(rs => [...rs, { id: tmp(), name: newName, position: rs.length }])
+    }
+  }
+
+  const removeRound = async (id) => {
+    if (instant && !String(id).startsWith('tmp-')) {
+      const { error } = await supabase.from('rounds').delete().eq('id', id)
+      if (error) { setErr(error.message); return }
+    }
+    const remaining = rounds.filter(r => r.id !== id)
+    setRounds(remaining)
+    if (id === currentRoundId) {
+      const nextCurrent = remaining[0]?.id ?? null
+      setCurrentRoundId(nextCurrent)
+      if (instant) await patchGame({ current_round_id: nextCurrent })
+    }
+  }
+
+  const commitRoundName = async (id, value) => {
+    const v = value.trim()
+    if (!v) return
+    if (!instant || String(id).startsWith('tmp-')) return
+    setRounds(rs => rs.map(r => r.id === id ? { ...r, name: v } : r))
+    const { error } = await supabase.from('rounds').update({ name: v }).eq('id', id)
+    if (error) setErr(error.message)
+  }
+
+  const moveRound = async (index, dir) => {
+    const j = index + dir
+    if (j < 0 || j >= rounds.length) return
+    const next = rounds.slice()
+    ;[next[index], next[j]] = [next[j], next[index]]
+    setRounds(next)
+    if (instant) {
+      const a = next[index], b = next[j]
+      if (!String(a.id).startsWith('tmp-')) await supabase.from('rounds').update({ position: index }).eq('id', a.id)
+      if (!String(b.id).startsWith('tmp-')) await supabase.from('rounds').update({ position: j }).eq('id', b.id)
     }
   }
 
@@ -324,6 +414,20 @@ function SettingsForm({ initial, user, nav }) {
           .insert({ game_id: gameId, name: t.name, color: t.color, position: i })
         if (error) throw error
       }
+
+      if (roundsEnabled) {
+        // Always have at least one round to score into.
+        const seed = rounds.length ? rounds : [{ name: 'Round 1' }]
+        const rows = seed.map((r, i) => ({ game_id: gameId, name: r.name || `Round ${i + 1}`, position: i }))
+        const { data: created, error: rErr } = await supabase.from('rounds').insert(rows).select('id, position')
+        if (rErr) throw rErr
+        const first = created.sort((a, b) => a.position - b.position)[0]
+        const { error: gErr } = await supabase.from('games')
+          .update({ rounds_enabled: true, current_round_id: first?.id ?? null })
+          .eq('id', gameId)
+        if (gErr) throw gErr
+      }
+
       // Drop straight into the freshly created game.
       nav(`/game/${gameId}`, { replace: true })
     } catch (e) {
@@ -338,6 +442,7 @@ function SettingsForm({ initial, user, nav }) {
     { id: 'general', label: 'General' },
     { id: 'teams', label: 'Teams' },
     { id: 'scoring', label: 'Scoring' },
+    { id: 'rounds', label: 'Rounds' },
     ...(isEdit && isOwner ? [{ id: 'sharing', label: 'Sharing' }] : []),
   ]
 
@@ -380,7 +485,7 @@ function SettingsForm({ initial, user, nav }) {
 
       {/* Tabs */}
       <nav className="shrink-0 border-b-2 border-ink bg-cream/60 overflow-x-auto no-scrollbar">
-        <div className="flex gap-1 px-3 md:px-8 py-2 w-max md:w-auto">
+        <div className="flex gap-1 px-3 md:px-8 py-2 w-max md:w-full md:justify-center">
           {tabs.map(t => {
             const active = t.id === tab
             return (
@@ -537,6 +642,79 @@ function SettingsForm({ initial, user, nav }) {
               </div>
 
               <PresetsSection presets={presets} onChange={commitPresets} />
+            </div>
+          )}
+
+          {tab === 'rounds' && (
+            <div>
+              <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+                <div>
+                  <label className="block text-sm font-semibold">Enable rounds</label>
+                  <p className="text-xs text-ink/60">Track how teams perform over time. Each point change is tagged to the active round.</p>
+                </div>
+                <Toggle on={roundsEnabled} onClick={toggleRounds} />
+              </div>
+
+              {roundsEnabled && (
+                <>
+                  <label className="block text-sm font-semibold mb-2">Rounds</label>
+                  <div className="space-y-2">
+                    {rounds.map((r, i) => (
+                      <motion.div
+                        key={r.id}
+                        layout
+                        initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+                        className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-cream"
+                      >
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => moveRound(i, -1)}
+                            disabled={i === 0}
+                            className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
+                            aria-label="Move up"
+                          >▲</button>
+                          <button
+                            type="button"
+                            onClick={() => moveRound(i, 1)}
+                            disabled={i === rounds.length - 1}
+                            className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center text-[10px] leading-none font-bold disabled:opacity-30 hover:bg-candy-yellow transition"
+                            aria-label="Move down"
+                          >▼</button>
+                        </div>
+                        <span className="shrink-0 w-8 h-8 grid place-items-center rounded-lg border-2 border-ink bg-white font-display font-bold text-sm tabular-nums">
+                          {i + 1}
+                        </span>
+                        <input
+                          className="flex-1 px-3 py-2 rounded-xl border-2 border-ink bg-white outline-none font-medium"
+                          value={r.name}
+                          onChange={e => setRounds(rs => rs.map(x => x.id === r.id ? { ...x, name: e.target.value } : x))}
+                          onBlur={e => commitRoundName(r.id, e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                          placeholder={`Round ${i + 1}`}
+                        />
+                        <button
+                          onClick={() => removeRound(r.id)}
+                          disabled={rounds.length <= 1}
+                          className="w-10 h-10 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white font-bold transition disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-ink"
+                          title={rounds.length <= 1 ? 'Keep at least one round' : 'Remove'}
+                        >×</button>
+                      </motion.div>
+                    ))}
+                    <motion.button
+                      type="button"
+                      layout
+                      onClick={addRound}
+                      className="w-full flex items-center justify-center gap-2 p-2 rounded-2xl border-2 border-dashed border-ink/30 bg-cream/40 text-ink/60 hover:bg-candy-yellow hover:border-ink hover:text-ink font-display font-semibold transition"
+                    >
+                      <span className="text-lg leading-none">+</span> Add round
+                    </motion.button>
+                  </div>
+                  <p className="text-xs text-ink/60 mt-3">
+                    You can also add the next round on the fly from the game screen.
+                  </p>
+                </>
+              )}
             </div>
           )}
 
