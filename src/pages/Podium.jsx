@@ -78,7 +78,20 @@ export default function Podium() {
     [teams, count]
   )
 
-  const totalSteps = ranked.length
+  // Standard competition ranking: equal scores share a place (1, 2, 2, 4…)
+  const ranks = useMemo(() => {
+    const out = []
+    for (let i = 0; i < ranked.length; i++) {
+      if (i > 0 && ranked[i].score === ranked[i - 1].score) out.push(out[i - 1])
+      else out.push(i + 1)
+    }
+    return out
+  }, [ranked])
+
+  // Unique place values, best → worst (e.g. [1, 2, 4]); one reveal step per group
+  const uniqueRanks = useMemo(() => [...new Set(ranks)], [ranks])
+
+  const totalSteps = uniqueRanks.length
 
   useEffect(() => { setStep(0) }, [count])
 
@@ -133,7 +146,8 @@ export default function Podium() {
   const slotOrder = makePositionOrder(ranked.length)
   const totalRanks = ranked.length
   const finished = totalSteps > 0 && step >= totalSteps
-  const nextRank = totalSteps - step
+  // The place value about to be revealed by the next step (worst group first)
+  const nextRank = step < totalSteps ? uniqueRanks[totalSteps - step - 1] : 1
   const hasTeams = ranked.length > 0
 
   return (
@@ -216,8 +230,10 @@ export default function Podium() {
           <div className="flex items-end justify-center gap-2 md:gap-4 w-full max-w-6xl">
             {slotOrder.map(i => {
               const team = ranked[i]
-              const rank = i + 1
-              const revealed = step >= (ranked.length - i)
+              const rank = ranks[i]
+              // Reveal worst group first; tied teams share a group and appear together
+              const groupIndex = uniqueRanks.indexOf(rank)
+              const revealed = step >= (totalSteps - groupIndex)
               return (
                 <PodiumSlot
                   key={team.id}
