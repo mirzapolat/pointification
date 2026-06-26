@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { QRCodeSVG } from 'qrcode.react'
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react'
 import { supabase, logoUrl } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
@@ -337,7 +338,6 @@ function SettingsForm({ initial, user, nav }) {
     { id: 'general', label: 'General' },
     { id: 'teams', label: 'Teams' },
     { id: 'scoring', label: 'Scoring' },
-    ...(isOwner ? [{ id: 'appearance', label: 'Appearance' }] : []),
     ...(isEdit && isOwner ? [{ id: 'sharing', label: 'Sharing' }] : []),
   ]
 
@@ -407,7 +407,7 @@ function SettingsForm({ initial, user, nav }) {
             <div>
               <label className="block text-sm font-semibold mb-1">Game name</label>
               <input
-                className="input-chunk mb-6"
+                className="input-chunk"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 onBlur={commitName}
@@ -416,15 +416,30 @@ function SettingsForm({ initial, user, nav }) {
                 autoFocus={!isEdit}
               />
 
-              <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
-                <div>
-                  <label className="block text-sm font-semibold">Allow negative scores</label>
-                  <p className="text-xs text-ink/60">When off, scores can't go below zero.</p>
+              {isOwner && (
+                <div className="mt-6">
+                  <LogoSection
+                    logoPath={logoPath}
+                    placement={logoPlacement}
+                    shape={logoShape}
+                    scale={logoScale}
+                    pendingPreview={pendingPreview}
+                    removeLogo={removeLogo}
+                    busy={logoBusy}
+                    onFile={handleLogoFile}
+                    onPlacement={handleLogoPlacement}
+                    onShape={handleLogoShape}
+                    onScale={handleLogoScale}
+                    onClear={handleLogoClear}
+                  />
                 </div>
-                <Toggle on={allowNegative} onClick={toggleNegative} />
-              </div>
+              )}
+            </div>
+          )}
 
-              <div className="p-3 rounded-2xl border-2 border-dashed border-ink/20">
+          {tab === 'teams' && (
+            <div>
+              <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <label className="block text-sm font-semibold">Team order</label>
                   <span className="text-xs text-ink/60 truncate">
@@ -455,11 +470,7 @@ function SettingsForm({ initial, user, nav }) {
                   })}
                 </div>
               </div>
-            </div>
-          )}
 
-          {tab === 'teams' && (
-            <div>
               <label className="block text-sm font-semibold mb-2">Teams</label>
               <div className="space-y-2">
                 {teams.map((t, i) => (
@@ -516,24 +527,17 @@ function SettingsForm({ initial, user, nav }) {
           )}
 
           {tab === 'scoring' && (
-            <PresetsSection presets={presets} onChange={commitPresets} />
-          )}
+            <div>
+              <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
+                <div>
+                  <label className="block text-sm font-semibold">Allow negative scores</label>
+                  <p className="text-xs text-ink/60">When off, scores can't go below zero.</p>
+                </div>
+                <Toggle on={allowNegative} onClick={toggleNegative} />
+              </div>
 
-          {tab === 'appearance' && isOwner && (
-            <LogoSection
-              logoPath={logoPath}
-              placement={logoPlacement}
-              shape={logoShape}
-              scale={logoScale}
-              pendingPreview={pendingPreview}
-              removeLogo={removeLogo}
-              busy={logoBusy}
-              onFile={handleLogoFile}
-              onPlacement={handleLogoPlacement}
-              onShape={handleLogoShape}
-              onScale={handleLogoScale}
-              onClear={handleLogoClear}
-            />
+              <PresetsSection presets={presets} onChange={commitPresets} />
+            </div>
           )}
 
           {tab === 'sharing' && isEdit && isOwner && (
@@ -932,17 +936,7 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
             className="overflow-hidden"
           >
             <div className="flex flex-col sm:flex-row gap-3 pt-2 pr-2 pb-2">
-              <div className="shrink-0 self-center sm:self-start p-2.5 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm">
-                <QRCodeSVG
-                  value={url}
-                  size={132}
-                  bgColor="#ffffff"
-                  fgColor="#0F0F12"
-                  level="M"
-                  marginSize={0}
-                />
-                <p className="mt-1.5 text-center text-[11px] font-semibold text-ink/60">Scan to watch</p>
-              </div>
+              <QRPreview url={url} />
               <div className="flex-1 flex flex-col gap-2">
                 <input
                   readOnly
@@ -966,6 +960,171 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
 
       {err && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{err}</div>}
     </div>
+  )
+}
+
+function QRPreview({ url }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState({ left: 0, top: 0 })
+  const [fullscreen, setFullscreen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [note, setNote] = useState(null)
+  const canvasRef = useRef(null)
+  const wrapRef = useRef(null)
+  const buttonRef = useRef(null)
+  const menuRef = useRef(null)
+
+  const openMenu = () => {
+    if (menuOpen) { setMenuOpen(false); return }
+    const r = buttonRef.current?.getBoundingClientRect()
+    if (r) {
+      const width = 192 // w-48
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8))
+      setMenuPos({ left, top: r.bottom + 8 })
+    }
+    setMenuOpen(true)
+  }
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e) => {
+      if (buttonRef.current?.contains(e.target)) return
+      if (menuRef.current?.contains(e.target)) return
+      setMenuOpen(false)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    const onScroll = () => setMenuOpen(false)
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [menuOpen])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e) => { if (e.key === 'Escape') setFullscreen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
+
+  const copyPng = () => {
+    setMenuOpen(false)
+    setNote(null)
+    const canvas = canvasRef.current ?? wrapRef.current?.querySelector('canvas')
+    if (!canvas) return
+    canvas.toBlob(async (blob) => {
+      if (!blob) return
+      try {
+        await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })])
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1800)
+      } catch {
+        // Image clipboard isn't universally supported — fall back to a download.
+        try {
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(blob)
+          a.download = 'pointification-qr.png'
+          a.click()
+          URL.revokeObjectURL(a.href)
+          setNote('Copying images isn’t supported here — downloaded instead.')
+        } catch {
+          setNote('Could not copy the QR code.')
+        }
+      }
+    }, 'image/png')
+  }
+
+  return (
+    <div ref={wrapRef} className="relative shrink-0 self-center sm:self-start">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openMenu}
+        className="block p-2.5 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm hover:-translate-y-0.5 transition"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        title="QR code options"
+      >
+        <QRCodeSVG value={url} size={132} bgColor="#ffffff" fgColor="#0F0F12" level="M" marginSize={0} />
+        <p className="mt-1.5 text-center text-[11px] font-semibold text-ink/60">
+          {copied ? 'Copied!' : 'Tap for options'}
+        </p>
+      </button>
+
+      {/* Hi-res canvas kept offscreen for crisp PNG export */}
+      <div className="sr-only" aria-hidden>
+        <QRCodeCanvas ref={canvasRef} value={url} size={1024} bgColor="#ffffff" fgColor="#0F0F12" level="M" marginSize={2} />
+      </div>
+
+      {menuOpen && createPortal(
+        <motion.div
+          ref={menuRef}
+          initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.1 }}
+          role="menu"
+          style={{ position: 'fixed', left: menuPos.left, top: menuPos.top }}
+          className="z-[120] p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk w-48"
+        >
+          <button
+            type="button" role="menuitem" onClick={copyPng}
+            className="w-full text-left px-3 py-2 rounded-xl hover:bg-cream font-semibold text-sm inline-flex items-center gap-2.5"
+          >
+            <CopyIcon /> Copy as PNG
+          </button>
+          <button
+            type="button" role="menuitem" onClick={() => { setMenuOpen(false); setFullscreen(true) }}
+            className="w-full text-left px-3 py-2 rounded-xl hover:bg-cream font-semibold text-sm inline-flex items-center gap-2.5"
+          >
+            <ExpandIcon /> Show fullscreen
+          </button>
+        </motion.div>,
+        document.body
+      )}
+
+      {note && <p className="mt-1 max-w-[150px] text-[11px] text-ink/60">{note}</p>}
+
+      {fullscreen && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          onClick={() => setFullscreen(false)}
+          className="fixed inset-0 z-[100] bg-ink/85 backdrop-blur-sm grid place-items-center p-6 cursor-zoom-out"
+        >
+          <div onClick={e => e.stopPropagation()} className="card-chunk bg-white p-5 md:p-8 grid place-items-center cursor-default">
+            <div className="w-[min(78vw,78vh)] h-[min(78vw,78vh)]">
+              <QRCodeSVG value={url} size={512} bgColor="#ffffff" fgColor="#0F0F12" level="M" marginSize={0} style={{ width: '100%', height: '100%' }} />
+            </div>
+            <button type="button" onClick={() => setFullscreen(false)} className="btn-chunk bg-candy-mint mt-5">Done</button>
+          </div>
+        </motion.div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+function CopyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
+function ExpandIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
   )
 }
 
@@ -1240,17 +1399,26 @@ function PresetsSection({ presets, onChange }) {
     next[idx] = { ...next[idx], value: v }
     push(next)
   }
-  const handleMove = (id, dir) => {
-    const idx = items.findIndex(it => it.id === id)
-    if (idx === -1) return
-    const j = idx + dir
-    if (j < 0 || j >= items.length) return
-    const next = items.slice()
-    ;[next[idx], next[j]] = [next[j], next[idx]]
-    push(next)
-  }
   const handleReset = () =>
     push(DEFAULT_PRESETS.map(v => ({ id: `p-${idSeed.current++}`, value: v })))
+
+  // Move an item from one index to another (used by drag-and-drop and arrows).
+  const moveTo = (from, to) => {
+    if (from === to || to < 0 || to >= items.length) return
+    const next = items.slice()
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    push(next)
+  }
+
+  const [dragIndex, setDragIndex] = useState(null)
+  const [overIndex, setOverIndex] = useState(null)
+
+  const onDrop = (to) => {
+    if (dragIndex !== null) moveTo(dragIndex, to)
+    setDragIndex(null)
+    setOverIndex(null)
+  }
 
   return (
     <div className="p-3 rounded-2xl border-2 border-dashed border-ink/20">
@@ -1268,30 +1436,39 @@ function PresetsSection({ presets, onChange }) {
         )}
       </div>
       <p className="text-xs text-ink/60 mb-3">
-        Shown in the popup when you tap a team. Type any whole number — use a minus sign for penalties. Use the ◀ ▶ arrows to rearrange.
+        Shown in the popup when you tap a team, top to bottom. Type any whole number — use a minus sign for penalties. Drag the handle (or use the arrows) to reorder.
       </p>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-2">
         <AnimatePresence initial={false}>
           {items.map((item, i) => (
-            <PresetChip
+            <PresetRow
               key={item.id}
               item={item}
+              index={i}
               isFirst={i === 0}
               isLast={i === items.length - 1}
+              dragging={dragIndex === i}
+              dragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
+              onDragStart={() => setDragIndex(i)}
+              onDragEnter={() => setOverIndex(i)}
+              onDrop={() => onDrop(i)}
+              onDragEnd={() => { setDragIndex(null); setOverIndex(null) }}
+              onMove={(dir) => moveTo(i, i + dir)}
               onCommit={(v) => handleUpdate(item.id, v)}
               onRemove={() => handleRemove(item.id)}
-              onMove={(dir) => handleMove(item.id, dir)}
             />
           ))}
         </AnimatePresence>
+      </div>
 
+      <div className="flex gap-2 mt-3">
         <motion.button
           type="button"
           layout
           onClick={() => handleAdd(5)}
           disabled={full}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-dashed border-ink/40 bg-candy-mint/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-mint transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-mint/30"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-ink/40 bg-candy-mint/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-mint transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-mint/30"
           title="Add a reward preset"
         >
           <span className="leading-none">＋</span> reward
@@ -1301,7 +1478,7 @@ function PresetsSection({ presets, onChange }) {
           layout
           onClick={() => handleAdd(-5)}
           disabled={full}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-dashed border-ink/40 bg-candy-pink/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-pink hover:text-white transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-pink/30 disabled:hover:text-ink"
+          className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-ink/40 bg-candy-pink/30 text-ink font-display font-semibold text-sm hover:border-ink hover:bg-candy-pink hover:text-white transition disabled:opacity-40 disabled:hover:border-ink/40 disabled:hover:bg-candy-pink/30 disabled:hover:text-ink"
           title="Add a penalty preset"
         >
           <span className="leading-none">−</span> penalty
@@ -1320,7 +1497,7 @@ function PresetsSection({ presets, onChange }) {
   )
 }
 
-function PresetChip({ item, isFirst, isLast, onCommit, onRemove, onMove }) {
+function PresetRow({ item, index, isFirst, isLast, dragging, dragOver, onDragStart, onDragEnter, onDrop, onDragEnd, onMove, onCommit, onRemove }) {
   const { value } = item
   const [draft, setDraft] = useState(String(value))
 
@@ -1328,10 +1505,6 @@ function PresetChip({ item, isFirst, isLast, onCommit, onRemove, onMove }) {
 
   const parsed = parseInt(draft, 10)
   const previewPositive = Number.isFinite(parsed) ? parsed > 0 : value > 0
-  const bg = previewPositive ? 'bg-candy-mint text-ink' : 'bg-candy-pink text-white'
-  const divider = previewPositive ? 'border-ink/20' : 'border-white/30'
-  const ctrlHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
-  const xHover = previewPositive ? 'hover:bg-ink/10' : 'hover:bg-white/20'
 
   const commit = () => {
     const n = parseInt(draft, 10)
@@ -1345,25 +1518,35 @@ function PresetChip({ item, isFirst, isLast, onCommit, onRemove, onMove }) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.85 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.85 }}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: dragging ? 0.4 : 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
       transition={{
         layout: { type: 'spring', stiffness: 380, damping: 28 },
         default: { type: 'spring', stiffness: 320, damping: 22 },
       }}
-      className={`flex items-stretch rounded-xl border-2 border-ink overflow-hidden font-display font-bold shadow-chunk-sm select-none ${bg}`}
+      onDragOver={e => { e.preventDefault(); onDragEnter() }}
+      onDrop={e => { e.preventDefault(); onDrop() }}
+      className={`flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white ${dragOver ? 'ring-2 ring-candy-pink ring-offset-1 ring-offset-cream' : ''}`}
     >
-      <button
-        type="button"
-        onClick={() => onMove(-1)}
-        disabled={isFirst}
-        className={`px-1.5 flex items-center justify-center border-r-2 ${divider} ${ctrlHover} transition disabled:opacity-30 disabled:hover:bg-transparent`}
-        title="Move left"
-        aria-label="Move left"
+      <span
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        className="shrink-0 w-7 h-9 grid place-items-center rounded-lg border-2 border-ink bg-cream text-ink/50 cursor-grab active:cursor-grabbing hover:bg-candy-yellow hover:text-ink transition"
+        title="Drag to reorder"
+        aria-label="Drag to reorder"
       >
-        <ChevronIcon dir="left" />
-      </button>
+        <GripIcon />
+      </span>
+
+      <span
+        className={`shrink-0 w-9 h-9 grid place-items-center rounded-lg border-2 border-ink font-display font-bold ${previewPositive ? 'bg-candy-mint text-ink' : 'bg-candy-pink text-white'}`}
+        aria-hidden
+      >
+        {previewPositive ? '+' : '−'}
+      </span>
+
       <input
         type="number"
         value={draft}
@@ -1373,23 +1556,37 @@ function PresetChip({ item, isFirst, isLast, onCommit, onRemove, onMove }) {
           if (e.key === 'Enter') e.currentTarget.blur()
           if (e.key === 'Escape') { setDraft(String(value)); e.currentTarget.blur() }
         }}
-        className="w-16 px-2 py-1.5 bg-transparent outline-none text-center text-lg tabular-nums no-spin"
+        className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-ink bg-white outline-none font-display font-bold text-lg tabular-nums no-spin"
         aria-label="Preset value"
       />
-      <button
-        type="button"
-        onClick={() => onMove(1)}
-        disabled={isLast}
-        className={`px-1.5 flex items-center justify-center border-l-2 ${divider} ${ctrlHover} transition disabled:opacity-30 disabled:hover:bg-transparent`}
-        title="Move right"
-        aria-label="Move right"
-      >
-        <ChevronIcon dir="right" />
-      </button>
+
+      <div className="flex flex-col gap-0.5 shrink-0">
+        <button
+          type="button"
+          onClick={() => onMove(-1)}
+          disabled={isFirst}
+          className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center disabled:opacity-30 hover:bg-candy-yellow transition"
+          title="Move up"
+          aria-label="Move up"
+        >
+          <ChevronIcon dir="up" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onMove(1)}
+          disabled={isLast}
+          className="w-6 h-[18px] rounded-md border-2 border-ink bg-white grid place-items-center disabled:opacity-30 hover:bg-candy-yellow transition"
+          title="Move down"
+          aria-label="Move down"
+        >
+          <ChevronIcon dir="down" />
+        </button>
+      </div>
+
       <button
         type="button"
         onClick={onRemove}
-        className={`px-2 border-l-2 ${divider} ${xHover} text-sm transition`}
+        className="shrink-0 w-9 h-9 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white font-bold transition"
         title="Remove preset"
         aria-label="Remove preset"
       >×</button>
@@ -1397,11 +1594,29 @@ function PresetChip({ item, isFirst, isLast, onCommit, onRemove, onMove }) {
   )
 }
 
+function GripIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+      <circle cx="4" cy="2.5" r="1.1" />
+      <circle cx="8" cy="2.5" r="1.1" />
+      <circle cx="4" cy="6" r="1.1" />
+      <circle cx="8" cy="6" r="1.1" />
+      <circle cx="4" cy="9.5" r="1.1" />
+      <circle cx="8" cy="9.5" r="1.1" />
+    </svg>
+  )
+}
+
 function ChevronIcon({ dir }) {
-  const d = dir === 'left' ? 'M7 2 L3 5 L7 8' : 'M3 2 L7 5 L3 8'
+  const paths = {
+    left: 'M7 2 L3 5 L7 8',
+    right: 'M3 2 L7 5 L3 8',
+    up: 'M2 7 L5 3 L8 7',
+    down: 'M2 3 L5 7 L8 3',
+  }
   return (
     <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="opacity-80">
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={paths[dir] ?? paths.down} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

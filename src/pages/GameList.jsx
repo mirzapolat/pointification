@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase, logoUrl } from '../lib/supabase'
@@ -441,6 +442,11 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
   const teams = game.teams ?? []
   const isArchived = !!game.archived_at
   const logo = game.logo_path ? logoUrl(game.logo_path) : null
+  const [menu, setMenu] = useState(null) // { type: 'show'|'remove', x, y } | null
+  const openMenu = (type, e) => {
+    e.preventDefault()
+    setMenu({ type, x: e.clientX, y: e.clientY })
+  }
   return (
     <motion.div
       layout
@@ -502,23 +508,118 @@ function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }) {
         </div>
       </Link>
       <div className="flex border-t-2 border-ink">
-        <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition">Settings</button>
+        <button
+          onClick={(e) => openMenu('show', e)}
+          aria-haspopup="menu"
+          className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition"
+        >
+          Show
+        </button>
         <div className="w-[2px] bg-ink" />
-        <Link to={`/game/${game.id}/log`} className="flex-1 py-2.5 font-display font-semibold text-center hover:bg-candy-mint transition">Details</Link>
-        {onArchive && (
-          <>
-            <div className="w-[2px] bg-ink" />
-            <button onClick={onArchive} className={`flex-1 py-2.5 font-display font-semibold hover:bg-candy-blue hover:text-white transition ${isArchived ? 'text-sm' : ''}`}>
-              {isArchived ? 'Unarchive' : 'Archive'}
-            </button>
-          </>
-        )}
+        <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-mint transition">
+          Settings
+        </button>
         <div className="w-[2px] bg-ink" />
-        <button onClick={onDelete} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition">
-          {isOwner ? 'Delete' : 'Leave'}
+        <button
+          onClick={(e) => openMenu('remove', e)}
+          aria-haspopup="menu"
+          className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition"
+        >
+          Remove
         </button>
       </div>
+
+      {menu && createPortal(
+        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          {menu.type === 'show' ? (
+            <>
+              <MenuLink to={`/game/${game.id}`} hover="hover:bg-candy-yellow" icon={<PlayIcon />} label="Open Game" onSelect={() => setMenu(null)} />
+              <MenuLink to={`/game/${game.id}/log`} hover="hover:bg-candy-mint" icon={<ChartIcon />} label="Analysis" onSelect={() => setMenu(null)} />
+              <MenuLink to={`/game/${game.id}/podium`} hover="hover:bg-candy-blue hover:text-white" icon={<PodiumIcon />} label="Podium" onSelect={() => setMenu(null)} />
+            </>
+          ) : (
+            <>
+              {onArchive && (
+                <MenuButton onClick={() => { setMenu(null); onArchive() }} hover="hover:bg-candy-blue hover:text-white" icon={<ArchiveIcon />} label={isArchived ? 'Unarchive' : 'Archive'} />
+              )}
+              <MenuButton onClick={() => { setMenu(null); onDelete() }} hover="hover:bg-candy-pink hover:text-white" icon={isOwner ? <TrashIcon /> : <ExitIcon />} label={isOwner ? 'Delete' : 'Leave'} />
+            </>
+          )}
+        </ContextMenu>,
+        document.body
+      )}
     </motion.div>
+  )
+}
+
+function ContextMenu({ x, y, onClose, children }) {
+  const ref = useRef(null)
+  const [pos, setPos] = useState({ left: x, top: y })
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8))
+    const top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8))
+    setPos({ left, top })
+  }, [x, y])
+
+  useEffect(() => {
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onClose, true)
+    window.addEventListener('resize', onClose)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onClose, true)
+      window.removeEventListener('resize', onClose)
+    }
+  }, [onClose])
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.1 }}
+      role="menu"
+      style={{ position: 'fixed', left: pos.left, top: pos.top }}
+      className="z-[100] p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk w-44"
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function MenuLink({ to, hover, icon, label, onSelect }) {
+  return (
+    <Link
+      to={to}
+      role="menuitem"
+      onClick={onSelect}
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl font-display font-semibold text-sm transition ${hover}`}
+    >
+      <span className="shrink-0">{icon}</span>
+      {label}
+    </Link>
+  )
+}
+
+function MenuButton({ onClick, hover, icon, label }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl font-display font-semibold text-sm transition ${hover}`}
+    >
+      <span className="shrink-0">{icon}</span>
+      {label}
+    </button>
   )
 }
 
@@ -568,6 +669,53 @@ function SkeletonGrid() {
 
 /* --- icons --- */
 
+function PlayIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="6 4 20 12 6 20 6 4" />
+    </svg>
+  )
+}
+function ChartIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  )
+}
+function PodiumIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  )
+}
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  )
+}
+function ExitIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
 function AllIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
