@@ -55,13 +55,45 @@ export function initAnalytics() {
   // The privacy page promises a DNT opt-out — keep that promise here.
   s.dataset.doNotTrack = 'true'
   s.dataset.beforeSend = BEFORE_SEND
+  // The script is a separate round trip, so `window.umami` does not exist for
+  // the first few hundred ms. `track` parks calls made in that window; replay
+  // them once the tracker is there, and bin them if it never arrives (an ad
+  // blocker aborts the request, which lands here as `error`).
+  s.addEventListener('load', flushPending)
+  s.addEventListener('error', dropPending)
   document.head.appendChild(s)
 }
 
-// Always optional-chained: an ad blocker, or a hostname outside `data-domains`,
-// leaves `window.umami` undefined.
+// Events fired from a mount effect — `public-view` is the usual one — race the
+// tracker script and used to vanish into the optional chain below, which is why
+// pageviews showed up in Umami and custom events did not. Hold them instead.
+//
+// Replay uses the tracker's *current* URL, not the one from when the call was
+// queued. The gap is the script's load time, so a route change inside it is
+// unlikely; the alternative is reimplementing Umami's payload builder here.
+let pending = []
+// A page that never loads the tracker must not grow this forever.
+const PENDING_LIMIT = 20
+
+function flushPending() {
+  const queued = pending
+  pending = []
+  for (const [name, data] of queued) window.umami?.track(name, data)
+}
+
+function dropPending() {
+  pending = []
+}
+
+// Still optional-chained after a flush: a hostname outside `data-domains`, or
+// `localStorage['umami.disabled']`, leaves the tracker loaded but inert.
 export function track(name, data) {
-  window.umami?.track(name, data)
+  if (typeof window === 'undefined') return
+  if (!window.umami) {
+    if (pending.length < PENDING_LIMIT) pending.push([name, data])
+    return
+  }
+  window.umami.track(name, data)
 }
 
 // A game only counts as "played" once per page session, however many taps it
