@@ -9,6 +9,7 @@ import { subscribeToGame } from '../lib/realtime'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
+import { track } from '../lib/analytics.js'
 
 const DEFAULT_PRESETS = [5, 10, 15, -5, -10, -15]
 const MAX_PRESETS = 24
@@ -392,6 +393,8 @@ function SettingsForm({ initial, user, nav }) {
         })
         if (gErr) throw gErr
       }
+
+      track('game-created', { rounds: roundsEnabled ? 'on' : 'off' })
 
       // Drop straight into the freshly created game.
       nav(`/game/${gameId}`, { replace: true })
@@ -1014,6 +1017,7 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
     if (error) return setErr(error.message)
     setIsPublic(data.is_public)
     setToken(data.public_token)
+    if (data.is_public) track('public-link')
   }
 
   const dialogs = useDialogs()
@@ -1292,7 +1296,7 @@ function MembersSection({ gameId }) {
     const { error } = await api.inviteMember(gameId, email.trim())
     setBusy(false)
     if (error) setErr(error.message)
-    else { setMsg(`Invited ${email}.`); setEmail('') }
+    else { track('invite-sent'); setMsg(`Invited ${email}.`); setEmail('') }
   }
 
   const dialogs = useDialogs()

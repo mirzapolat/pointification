@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
+import { track } from '../lib/analytics.js'
 
 export default function Login() {
   const { signIn, signUp, signOut, user, mfaRequired, verifyMfaCode } = useAuth()
@@ -35,6 +36,7 @@ export default function Login() {
       const { error } = await signUp(email, password, name)
       setBusy(false)
       if (error) return setErr(error.message)
+      track('signup')
       nav('/verify', { state: { email, name } })
     }
   }

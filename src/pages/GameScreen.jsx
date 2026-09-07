@@ -8,6 +8,7 @@ import { subscribeToGame } from '../lib/realtime'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import PointPopup from '../components/PointPopup.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
+import { trackFirstScore } from '../lib/analytics.js'
 
 export default function GameScreen() {
   const { id } = useParams()
@@ -193,6 +194,7 @@ export default function GameScreen() {
       setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score: t.score - effective } : t))
       dialogs.alert({ title: 'Could not apply', message: error.message })
     } else {
+      trackFirstScore(id)
       // We updated the score optimistically, so the realtime echo won't trigger
       // a net recompute for this client — do it explicitly.
       recomputeNetsRef.current()

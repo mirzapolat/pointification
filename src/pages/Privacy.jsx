@@ -81,8 +81,41 @@ export default function Privacy() {
         <Section title="Cookies & tracking">
           <p>
             Pointification stores a session token in your browser so you stay
-            signed in. There are no advertising cookies, no analytics, and no
-            third-party tracking pixels.
+            signed in. There are no advertising cookies and no third-party
+            tracking pixels.
+          </p>
+          <p>
+            For visitor statistics the site uses{' '}
+            <a href="https://umami.is" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
+              Umami
+            </a>
+            , an open-source analytics tool that the operator self-hosts on his
+            own infrastructure. No data is passed to an external analytics
+            provider. Umami sets no cookies and stores no identifier in your
+            browser; visits are counted using a hash that is derived from your
+            IP address and browser and rotates daily, so it cannot be traced
+            back to you or followed across days or across other websites. Your
+            IP address itself is never stored.
+          </p>
+          <p>Each measurement records only:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>the page visited, the referring page, browser, operating system, device type, and screen size</li>
+            <li>the country derived from the IP address, which is then discarded</li>
+            <li>
+              a handful of named actions — account created, game created, points
+              scored, public link enabled, public scoreboard viewed, collaborator
+              invited, donate link clicked — recorded as counts, with no account,
+              game, or team attached
+            </li>
+          </ul>
+          <p>
+            Page addresses are anonymised before they are recorded: game ids and
+            public share tokens are replaced with placeholders, so a share link
+            never appears in the statistics. Legal basis: Art. 6(1)(f) GDPR
+            (legitimate interest in understanding how the service is used).
+            Because no cookies are set and no personal data is stored, no
+            consent banner is required. You can opt out of the counting entirely
+            by enabling “Do Not Track” in your browser.
           </p>
         </Section>
 

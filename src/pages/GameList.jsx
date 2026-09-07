@@ -8,6 +8,7 @@ import { subscribeToGames } from '../lib/realtime'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
+import { track } from '../lib/analytics.js'
 
 const FILTERS = [
   { id: 'all',      label: 'All',             icon: AllIcon,      accent: '#FFD93D' },
@@ -315,6 +316,7 @@ function SupportMenu() {
   }
 
   const donate = () => {
+    track('donate', { source: 'app' })
     window.open(DONATE_URL, '_blank', 'noopener,noreferrer')
     setOpen(false)
   }

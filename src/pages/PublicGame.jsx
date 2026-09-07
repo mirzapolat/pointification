@@ -6,6 +6,7 @@ import { logoUrl } from '../lib/api'
 import { subscribeToPublicGame } from '../lib/realtime'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import { LogoCenterBadge, LogoTopRow, sortTeams } from './GameScreen.jsx'
+import { track } from '../lib/analytics.js'
 
 export default function PublicGame() {
   const { token } = useParams()
@@ -19,6 +20,7 @@ export default function PublicGame() {
     ;(async () => {
       const { data } = await api.getPublicGame(token)
       if (cancelled) return
+      track('public-view', { result: data?.game ? 'ok' : 'notfound' })
       if (!data?.game) { setStatus('notfound'); return }
       setGame(data.game)
       setTeams(data.teams ?? [])

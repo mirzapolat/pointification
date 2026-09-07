@@ -266,6 +266,8 @@ function Footer() {
                 href={DONATE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-umami-event="donate"
+                data-umami-event-source="landing"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-ink bg-candy-pink text-white text-sm font-display font-semibold shadow-chunk-sm hover:-translate-y-0.5 transition"
                 title="Support Pointification"
               >
