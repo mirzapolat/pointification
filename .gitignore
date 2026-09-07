@@ -6,6 +6,5 @@ dist
 .DS_Store
 .vite
 
-# Supabase CLI local state
-supabase/.temp
-supabase/.branches
+# Local app state (SQLite database + uploaded logos)
+data

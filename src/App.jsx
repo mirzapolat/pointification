@@ -24,11 +24,10 @@ function needsOnboarding(details) {
 }
 
 function Protected({ children, allow = 'app' }) {
-  const { session, loading, aalLoading, mfaRequired, details, detailsLoading } = useAuth()
+  const { user, loading, mfaRequired, details, detailsLoading } = useAuth()
   const loc = useLocation()
   if (loading) return <Splash />
-  if (!session) return <Navigate to="/login" replace />
-  if (aalLoading) return <Splash />
+  if (!user) return <Navigate to="/login" replace />
   if (mfaRequired) return <Navigate to="/login" replace state={{ from: loc.pathname }} />
   if (detailsLoading && !details) return <Splash />
 
@@ -47,10 +46,9 @@ function Protected({ children, allow = 'app' }) {
 }
 
 function Home() {
-  const { session, loading, aalLoading, mfaRequired, details, detailsLoading } = useAuth()
+  const { user, loading, mfaRequired, details, detailsLoading } = useAuth()
   if (loading) return <Splash />
-  if (!session) return <Landing />
-  if (aalLoading) return <Splash />
+  if (!user) return <Landing />
   if (mfaRequired) return <Navigate to="/login" replace />
   if (detailsLoading && !details) return <Splash />
   if (needsWelcome(details)) return <Navigate to="/welcome" replace />

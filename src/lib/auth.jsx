@@ -1,88 +1,72 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { supabase } from './supabase'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import * as api from './api'
 
 const AuthCtx = createContext(null)
 
+/**
+ * Holds the signed-in user, whether they still owe a 2FA code, and their
+ * onboarding progress. All three arrive from a single /api/auth/session call,
+ * so there is one loading flag rather than one per concern.
+ */
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [aal, setAal] = useState(null)
-  const [aalLoading, setAalLoading] = useState(true)
+  const [user, setUser] = useState(null)
+  const [mfaRequired, setMfaRequired] = useState(false)
   const [details, setDetails] = useState(null)
-  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [detailsLoading, setDetailsLoading] = useState(true)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null)
-      setLoading(false)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => sub.subscription.unsubscribe()
+  const applySession = useCallback((payload) => {
+    setUser(payload?.user ?? null)
+    setMfaRequired(!!payload?.mfa_required)
+    setDetails(payload?.details ?? null)
+    setLoading(false)
+    setDetailsLoading(false)
   }, [])
 
-  const refreshAal = useCallback(async () => {
-    if (!session) { setAal(null); setAalLoading(false); return }
-    setAalLoading(true)
-    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    setAal(data ?? null)
-    setAalLoading(false)
-  }, [session])
+  const refresh = useCallback(async () => {
+    const { data } = await api.getSession()
+    applySession(data)
+    return data
+  }, [applySession])
 
-  useEffect(() => {
-    if (!session) { setAal(null); setAalLoading(false); return }
-    let cancelled = false
-    setAalLoading(true)
-    ;(async () => {
-      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      if (cancelled) return
-      setAal(data ?? null)
-      setAalLoading(false)
-    })()
-    return () => { cancelled = true }
-  }, [session])
+  useEffect(() => { refresh() }, [refresh])
 
   const refreshDetails = useCallback(async () => {
-    const uid = session?.user?.id
-    if (!uid) { setDetails(null); return }
     setDetailsLoading(true)
-    const { data } = await supabase
-      .from('user_details')
-      .select('organization, role, intended_use, details_completed_at, onboarding_completed_at')
-      .eq('id', uid)
-      .maybeSingle()
+    const { data } = await api.getUserDetails()
     setDetails(data ?? null)
     setDetailsLoading(false)
-  }, [session?.user?.id])
+  }, [])
 
-  useEffect(() => { refreshDetails() }, [refreshDetails])
-
-  const mfaRequired =
-    !!session && aal?.currentLevel === 'aal1' && aal?.nextLevel === 'aal2'
+  /** Runs an auth call, then re-reads the session so the whole app updates. */
+  const withRefresh = useCallback(async (call) => {
+    const { error } = await call()
+    if (error) return { error }
+    await refresh()
+    return { error: null }
+  }, [refresh])
 
   const value = {
-    session,
-    user: session?.user ?? null,
+    user,
     loading,
-    aal,
-    aalLoading,
     mfaRequired,
-    refreshAal,
     details,
     detailsLoading,
+    refresh,
     refreshDetails,
-    signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
-    signUp: (email, password, displayName) =>
-      supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { display_name: (displayName ?? '').trim() || null } }
-      }),
-    verifySignupOtp: (email, token) =>
-      supabase.auth.verifyOtp({ email, token, type: 'signup' }),
-    resendSignupOtp: (email) =>
-      supabase.auth.resend({ type: 'signup', email }),
-    signOut: () => supabase.auth.signOut()
+    signIn: (email, password) => withRefresh(() => api.signIn(email, password)),
+    signUp: (email, password, displayName) => withRefresh(() => api.signUp(email, password, displayName)),
+    verifySignupCode: (email, code) => withRefresh(() => api.verifySignupCode(email, code)),
+    resendSignupCode: (email) => api.resendSignupCode(email),
+    verifyMfaCode: (code) => withRefresh(() => api.verifyMfaCode(code)),
+    signOut: async () => {
+      await api.signOut()
+      setUser(null)
+      setMfaRequired(false)
+      setDetails(null)
+    },
   }
+
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
 }
 

@@ -3,7 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react'
-import { supabase, logoUrl } from '../lib/supabase'
+import * as api from '../lib/api'
+import { logoUrl } from '../lib/api'
+import { subscribeToGame } from '../lib/realtime'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
@@ -34,22 +36,14 @@ export default function GameSettings() {
     if (!isEdit) return
     let cancelled = false
     ;(async () => {
-      const { data, error } = await supabase
-        .from('games')
-        .select('id, name, user_id, is_public, public_token, allow_negative, rounds_enabled, current_round_id, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort, teams (id, name, color, score, position), rounds!rounds_game_id_fkey (id, name, position)')
-        .eq('id', id)
-        .single()
+      const { data, error } = await api.getGame(id)
       if (cancelled) return
       if (error) {
-        // PGRST116 = no row matched (genuinely missing / no access).
-        if (error.code === 'PGRST116') setNotFound(true)
+        if (error.status === 404 || error.status === 403) setNotFound(true)
         else setLoadErr(error.message)
         setLoading(false)
         return
       }
-      if (!data) { setNotFound(true); setLoading(false); return }
-      data.teams = (data.teams ?? []).sort((a, b) => a.position - b.position)
-      data.rounds = (data.rounds ?? []).sort((a, b) => a.position - b.position)
       setInitial(data)
       setLoading(false)
     })()
@@ -129,7 +123,7 @@ function SettingsForm({ initial, user, nav }) {
 
   // --- Instant-apply primitives (edit mode) ---
   const patchGame = async (patch) => {
-    const { error } = await supabase.from('games').update(patch).eq('id', initial.id)
+    const { error } = await api.updateGame(initial.id, patch)
     if (error) setErr(error.message)
   }
 
@@ -162,10 +156,9 @@ function SettingsForm({ initial, user, nav }) {
     const color = nextColor(teams.map(t => t.color))
     const newName = `Team ${teams.length + 1}`
     if (instant) {
-      const { data, error } = await supabase.from('teams')
-        .insert({ game_id: initial.id, name: newName, color, position: teams.length })
-        .select('id, name, color, score, position')
-        .single()
+      const { data, error } = await api.createTeam(initial.id, {
+        name: newName, color, position: teams.length,
+      })
       if (error) { setErr(error.message); return }
       setTeams(ts => [...ts, data])
     } else {
@@ -175,7 +168,7 @@ function SettingsForm({ initial, user, nav }) {
 
   const removeTeam = async (id) => {
     if (instant && !String(id).startsWith('tmp-')) {
-      const { error } = await supabase.from('teams').delete().eq('id', id)
+      const { error } = await api.deleteTeam(id)
       if (error) { setErr(error.message); return }
     }
     setTeams(ts => ts.filter(t => t.id !== id))
@@ -184,7 +177,7 @@ function SettingsForm({ initial, user, nav }) {
   const updateTeam = async (id, patch) => {
     setTeams(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t))
     if (instant && !String(id).startsWith('tmp-')) {
-      const { error } = await supabase.from('teams').update(patch).eq('id', id)
+      const { error } = await api.updateTeam(id, patch)
       if (error) setErr(error.message)
     }
   }
@@ -194,7 +187,7 @@ function SettingsForm({ initial, user, nav }) {
     if (!v) return
     if (!instant || String(id).startsWith('tmp-')) return
     setTeams(ts => ts.map(t => t.id === id ? { ...t, name: v } : t))
-    const { error } = await supabase.from('teams').update({ name: v }).eq('id', id)
+    const { error } = await api.updateTeam(id, { name: v })
     if (error) setErr(error.message)
   }
 
@@ -207,12 +200,8 @@ function SettingsForm({ initial, user, nav }) {
     if (instant) {
       const a = next[index], b = next[j]
       // Reassign positions for the two swapped rows.
-      if (!String(a.id).startsWith('tmp-')) {
-        await supabase.from('teams').update({ position: index }).eq('id', a.id)
-      }
-      if (!String(b.id).startsWith('tmp-')) {
-        await supabase.from('teams').update({ position: j }).eq('id', b.id)
-      }
+      if (!String(a.id).startsWith('tmp-')) await api.updateTeam(a.id, { position: index })
+      if (!String(b.id).startsWith('tmp-')) await api.updateTeam(b.id, { position: j })
     }
   }
 
@@ -227,10 +216,7 @@ function SettingsForm({ initial, user, nav }) {
     }
     if (next && rounds.length === 0) {
       // Ensure an enabled game always has at least one round to score into.
-      const { data, error } = await supabase.from('rounds')
-        .insert({ game_id: initial.id, name: 'Round 1', position: 0 })
-        .select('id, name, position')
-        .single()
+      const { data, error } = await api.createRound(initial.id, { name: 'Round 1', position: 0 })
       if (error) { setErr(error.message); setRoundsEnabled(!next); return }
       setRounds([data])
       setCurrentRoundId(data.id)
@@ -243,10 +229,9 @@ function SettingsForm({ initial, user, nav }) {
   const addRound = async () => {
     const newName = `Round ${rounds.length + 1}`
     if (instant) {
-      const { data, error } = await supabase.from('rounds')
-        .insert({ game_id: initial.id, name: newName, position: rounds.length })
-        .select('id, name, position')
-        .single()
+      const { data, error } = await api.createRound(initial.id, {
+        name: newName, position: rounds.length,
+      })
       if (error) { setErr(error.message); return }
       setRounds(rs => [...rs, data])
       if (!currentRoundId) { setCurrentRoundId(data.id); await patchGame({ current_round_id: data.id }) }
@@ -257,7 +242,7 @@ function SettingsForm({ initial, user, nav }) {
 
   const removeRound = async (id) => {
     if (instant && !String(id).startsWith('tmp-')) {
-      const { error } = await supabase.from('rounds').delete().eq('id', id)
+      const { error } = await api.deleteRound(id)
       if (error) { setErr(error.message); return }
     }
     const remaining = rounds.filter(r => r.id !== id)
@@ -274,7 +259,7 @@ function SettingsForm({ initial, user, nav }) {
     if (!v) return
     if (!instant || String(id).startsWith('tmp-')) return
     setRounds(rs => rs.map(r => r.id === id ? { ...r, name: v } : r))
-    const { error } = await supabase.from('rounds').update({ name: v }).eq('id', id)
+    const { error } = await api.updateRound(id, { name: v })
     if (error) setErr(error.message)
   }
 
@@ -286,8 +271,8 @@ function SettingsForm({ initial, user, nav }) {
     setRounds(next)
     if (instant) {
       const a = next[index], b = next[j]
-      if (!String(a.id).startsWith('tmp-')) await supabase.from('rounds').update({ position: index }).eq('id', a.id)
-      if (!String(b.id).startsWith('tmp-')) await supabase.from('rounds').update({ position: j }).eq('id', b.id)
+      if (!String(a.id).startsWith('tmp-')) await api.updateRound(a.id, { position: index })
+      if (!String(b.id).startsWith('tmp-')) await api.updateRound(b.id, { position: j })
     }
   }
 
@@ -304,24 +289,17 @@ function SettingsForm({ initial, user, nav }) {
     }
     if (!file) return
     setLogoBusy(true)
-    try {
-      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-      const safeExt = /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png'
-      const newPath = `${user.id}/${initial.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
-      const { error: upErr } = await supabase.storage
-        .from('game-logos')
-        .upload(newPath, file, { contentType: file.type, upsert: false })
-      if (upErr) throw upErr
-      if (logoPath) await supabase.storage.from('game-logos').remove([logoPath])
-      const placement = logoPlacement || 'center'
-      await patchGame({ logo_path: newPath, logo_placement: placement })
-      setLogoPath(newPath)
-      setLogoPlacement(placement)
-    } catch (e) {
-      setErr(e.message ?? 'Could not upload logo.')
-    } finally {
-      setLogoBusy(false)
-    }
+    // The server stores the file, swaps out the previous one, and returns the
+    // updated game — so placement comes back already resolved.
+    const { data, error } = await api.uploadGameLogo(initial.id, file)
+    if (error) { setLogoBusy(false); setErr(error.message); return }
+    setLogoPath(data.logo_path)
+    // The server defaults placement to 'center' for a first upload; honour the
+    // choice already made in the editor if it differs.
+    const placement = logoPlacement || data.logo_placement
+    setLogoPlacement(placement)
+    if (placement !== data.logo_placement) await patchGame({ logo_placement: placement })
+    setLogoBusy(false)
   }
 
   const handleLogoPlacement = async (p) => {
@@ -354,15 +332,10 @@ function SettingsForm({ initial, user, nav }) {
     }
     if (!logoPath) return
     setLogoBusy(true)
-    try {
-      await supabase.storage.from('game-logos').remove([logoPath])
-      await patchGame({ logo_path: null, logo_placement: null })
-      setLogoPath(null)
-    } catch (e) {
-      setErr(e.message ?? 'Could not remove logo.')
-    } finally {
-      setLogoBusy(false)
-    }
+    const { error } = await api.removeGameLogo(initial.id)
+    setLogoBusy(false)
+    if (error) { setErr(error.message); return }
+    setLogoPath(null)
   }
 
   // --- New-game create flow (only used when isEdit === false) ---
@@ -374,7 +347,7 @@ function SettingsForm({ initial, user, nav }) {
 
     setBusy(true)
     try {
-      const { data, error } = await supabase.rpc('create_game', { p_name: name })
+      const { data, error } = await api.createGame(name)
       if (error) throw error
       const gameId = data.id
       const samePresets = presets.length === DEFAULT_PRESETS.length
@@ -384,47 +357,39 @@ function SettingsForm({ initial, user, nav }) {
       if (!samePresets) initialPatch.point_presets = presets
       if (teamSort !== 'manual') initialPatch.team_sort = teamSort
       if (Object.keys(initialPatch).length) {
-        const { error: e2 } = await supabase.from('games')
-          .update(initialPatch).eq('id', gameId)
+        const { error: e2 } = await api.updateGame(gameId, initialPatch)
         if (e2) throw e2
       }
 
       if (pendingFile) {
-        const ext = (pendingFile.name.split('.').pop() || 'png').toLowerCase()
-        const safeExt = /^[a-z0-9]{1,5}$/.test(ext) ? ext : 'png'
-        const newPath = `${user.id}/${gameId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
-        const { error: upErr } = await supabase.storage
-          .from('game-logos')
-          .upload(newPath, pendingFile, { contentType: pendingFile.type, upsert: false })
+        const { error: upErr } = await api.uploadGameLogo(gameId, pendingFile)
         if (upErr) throw upErr
-        const { error: lErr } = await supabase.from('games')
-          .update({
-            logo_path: newPath,
-            logo_placement: logoPlacement || 'center',
-            logo_shape: logoShape,
-            logo_scale: logoScale,
-          })
-          .eq('id', gameId)
+        const { error: lErr } = await api.updateGame(gameId, {
+          logo_placement: logoPlacement || 'center',
+          logo_shape: logoShape,
+          logo_scale: logoScale,
+        })
         if (lErr) throw lErr
       }
 
-      for (let i = 0; i < teams.length; i++) {
-        const t = teams[i]
-        const { error } = await supabase.from('teams')
-          .insert({ game_id: gameId, name: t.name, color: t.color, position: i })
-        if (error) throw error
-      }
+      const { error: tErr } = await api.createTeams(
+        gameId,
+        teams.map((t, i) => ({ name: t.name, color: t.color, position: i }))
+      )
+      if (tErr) throw tErr
 
       if (roundsEnabled) {
         // Always have at least one round to score into.
         const seed = rounds.length ? rounds : [{ name: 'Round 1' }]
-        const rows = seed.map((r, i) => ({ game_id: gameId, name: r.name || `Round ${i + 1}`, position: i }))
-        const { data: created, error: rErr } = await supabase.from('rounds').insert(rows).select('id, position')
+        const { data: created, error: rErr } = await api.createRounds(
+          gameId,
+          seed.map((r, i) => ({ name: r.name || `Round ${i + 1}`, position: i }))
+        )
         if (rErr) throw rErr
-        const first = created.sort((a, b) => a.position - b.position)[0]
-        const { error: gErr } = await supabase.from('games')
-          .update({ rounds_enabled: true, current_round_id: first?.id ?? null })
-          .eq('id', gameId)
+        const first = [...created].sort((a, b) => a.position - b.position)[0]
+        const { error: gErr } = await api.updateGame(gameId, {
+          rounds_enabled: true, current_round_id: first?.id ?? null,
+        })
         if (gErr) throw gErr
       }
 
@@ -796,7 +761,7 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
             </div>
           )}
         </button>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pick} />
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/avif" className="hidden" onChange={pick} />
 
         <div className="flex-1 min-w-0">
           {busy ? (
@@ -1044,9 +1009,7 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
 
   const toggle = async (enabled) => {
     setErr(null); setBusy(true)
-    const { data, error } = await supabase.rpc('set_game_sharing', {
-      p_game_id: gameId, p_enabled: enabled
-    })
+    const { data, error } = await api.setGameSharing(gameId, enabled)
     setBusy(false)
     if (error) return setErr(error.message)
     setIsPublic(data.is_public)
@@ -1064,7 +1027,7 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
     })
     if (!ok) return
     setErr(null); setBusy(true)
-    const { data, error } = await supabase.rpc('rotate_game_token', { p_game_id: gameId })
+    const { data, error } = await api.rotateGameToken(gameId)
     setBusy(false)
     if (error) return setErr(error.message)
     setToken(data.public_token)
@@ -1314,25 +1277,19 @@ function MembersSection({ gameId }) {
   const [err, setErr] = useState(null)
 
   const load = async () => {
-    const { data: mems } = await supabase.from('game_members')
-      .select('user_id, created_at, profiles:game_members_user_id_profiles_fkey (email, display_name)')
-      .eq('game_id', gameId)
-      .order('created_at')
-    setMembers(mems ?? [])
+    const { data } = await api.listMembers(gameId)
+    setMembers(data ?? [])
   }
 
   useEffect(() => {
     load()
-    const channel = supabase.channel(`members:${gameId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_members', filter: `game_id=eq.${gameId}` }, load)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return subscribeToGame(gameId, { game_members: load })
   }, [gameId])
 
   const invite = async (e) => {
     e.preventDefault()
     setErr(null); setMsg(null); setBusy(true)
-    const { error } = await supabase.rpc('invite_collaborator', { p_game_id: gameId, p_email: email.trim() })
+    const { error } = await api.inviteMember(gameId, email.trim())
     setBusy(false)
     if (error) setErr(error.message)
     else { setMsg(`Invited ${email}.`); setEmail('') }
@@ -1347,8 +1304,7 @@ function MembersSection({ gameId }) {
       tone: 'danger',
     })
     if (!ok) return
-    const { error } = await supabase.from('game_members').delete()
-      .eq('game_id', gameId).eq('user_id', userId)
+    const { error } = await api.removeMember(gameId, userId)
     if (error) setErr(error.message)
   }
 

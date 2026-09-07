@@ -49,8 +49,11 @@ export default function Privacy() {
         <Section title="Where the data is stored (Processors)">
           <p>
             The web application is self-hosted by the operator on a dedicated
-            server located in the European Union. The following processor is
-            also involved:
+            server located in the European Union. Your account, games, teams,
+            scores, point logs, and any game logo you upload are stored in a
+            SQLite database and on the file system of that same server — no
+            third-party database, authentication, or storage service is
+            involved. The only processor is:
           </p>
           <ul className="list-disc list-inside space-y-1">
             <li>
@@ -60,19 +63,10 @@ export default function Privacy() {
               </a>
               ) — provides the EU-based server that delivers the web application.
             </li>
-            <li>
-              <strong>Database &amp; authentication:</strong> Supabase Inc. (
-              <a href="https://supabase.com/privacy" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
-                supabase.com
-              </a>
-              ) — stores your account, games, teams, scores, and point logs.
-            </li>
           </ul>
           <p>
-            Both providers may process data in the European Union and in the
-            United States. Data protection contracts (Art. 28 GDPR) are in place
-            with both processors and the applicable standard contractual clauses
-            apply to any international transfer.
+            Hetzner processes data in the European Union. A data processing
+            contract under Art. 28 GDPR is in place.
           </p>
         </Section>
 

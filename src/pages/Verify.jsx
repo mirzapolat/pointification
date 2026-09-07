@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth.jsx'
 const CODE_LEN = 6
 
 export default function Verify() {
-  const { verifySignupOtp, resendSignupOtp, session } = useAuth()
+  const { verifySignupCode, resendSignupCode, user } = useAuth()
   const loc = useLocation()
   const nav = useNavigate()
   const email = loc.state?.email ?? ''
@@ -22,8 +22,8 @@ export default function Verify() {
   }, [email, nav])
 
   useEffect(() => {
-    if (session) nav('/', { replace: true })
-  }, [session, nav])
+    if (user) nav('/', { replace: true })
+  }, [user, nav])
 
   useEffect(() => { inputs.current[0]?.focus() }, [])
 
@@ -86,7 +86,7 @@ export default function Verify() {
     const token = digits.join('')
     if (token.length !== CODE_LEN) return setErr('Enter the 6-digit code.')
     setBusy(true); setErr(null)
-    const { error } = await verifySignupOtp(email, token)
+    const { error } = await verifySignupCode(email, token)
     setBusy(false)
     if (error) {
       setErr(error.message)
@@ -97,7 +97,7 @@ export default function Verify() {
 
   const resend = async () => {
     setResending(true); setErr(null)
-    const { error } = await resendSignupOtp(email)
+    const { error } = await resendSignupCode(email)
     setResending(false)
     if (error) setErr(error.message)
     else setResentAt(Date.now())
@@ -136,7 +136,7 @@ export default function Verify() {
         </div>
 
         <p className="text-sm text-ink/70 mb-5">
-          Enter it below or click the link in the email — either works.
+          Enter the code below to finish creating your account.
         </p>
 
         <div className="flex justify-between gap-2 mb-2" onPaste={handlePaste}>

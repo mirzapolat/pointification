@@ -10,7 +10,7 @@ npm-debug.log*
 Dockerfile
 .dockerignore
 docker-compose*.yml
-supabase/.temp
 README.md
 LICENSE
 .claude
+data

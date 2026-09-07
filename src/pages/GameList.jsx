@@ -2,7 +2,9 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase, logoUrl } from '../lib/supabase'
+import * as api from '../lib/api'
+import { logoUrl } from '../lib/api'
+import { subscribeToGames } from '../lib/realtime'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
@@ -23,24 +25,15 @@ export default function GameList() {
   const [filter, setFilter] = useState('all')
 
   const load = async () => {
-    const { data, error } = await supabase
-      .from('games')
-      .select('id, name, user_id, is_public, public_token, archived_at, created_at, updated_at, allow_negative, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort, teams (id, name, color)')
-      .order('updated_at', { ascending: false })
+    const { data, error } = await api.listGames()
     if (!error) setGames(data ?? [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
-  useEffect(() => {
-    const channel = supabase.channel('games-list')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' },        load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' },        load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_members' }, load)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [])
+  // Any change to a game the user can see reshuffles this list, so reload wholesale.
+  useEffect(() => subscribeToGames({ '*': load }), [])
 
   const handleSignOut = async () => {
     const ok = await dialogs.confirm({
@@ -54,9 +47,9 @@ export default function GameList() {
 
   const archive = async (game) => {
     const archived = !!game.archived_at
-    const { error } = await supabase.from('games')
-      .update({ archived_at: archived ? null : new Date().toISOString() })
-      .eq('id', game.id)
+    const { error } = await api.updateGame(game.id, {
+      archived_at: archived ? null : new Date().toISOString(),
+    })
     if (error) await dialogs.alert({ title: archived ? 'Could not unarchive' : 'Could not archive', message: error.message })
   }
 
@@ -68,17 +61,8 @@ export default function GameList() {
       tone: 'danger',
     })
     if (!ok) return
-    // Best-effort: clean up any logo objects sitting at {user_id}/{game_id}/* before
-    // the row goes away (storage RLS requires the game to still exist for the
-    // ownership check, so do it first).
-    if (user?.id) {
-      const prefix = `${user.id}/${game.id}`
-      const { data: files } = await supabase.storage.from('game-logos').list(prefix, { limit: 100 })
-      if (files?.length) {
-        await supabase.storage.from('game-logos').remove(files.map(f => `${prefix}/${f.name}`))
-      }
-    }
-    const { error } = await supabase.from('games').delete().eq('id', game.id)
+    // The server removes the game's stored logo along with the row.
+    const { error } = await api.deleteGame(game.id)
     if (error) await dialogs.alert({ title: 'Could not delete', message: error.message })
   }
 
@@ -90,16 +74,8 @@ export default function GameList() {
       tone: 'danger',
     })
     if (!ok) return
-    const { data, error } = await supabase.from('game_members').delete()
-      .eq('game_id', game.id).eq('user_id', user.id)
-      .select('user_id')
+    const { error } = await api.removeMember(game.id, user.id)
     if (error) return dialogs.alert({ title: 'Could not leave', message: error.message })
-    if (!data?.length) {
-      return dialogs.alert({
-        title: 'Could not leave',
-        message: 'The server refused to remove your membership. Please try again or contact the game owner.',
-      })
-    }
     setGames(gs => gs.filter(x => x.id !== game.id))
   }
 

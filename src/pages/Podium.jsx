@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import * as api from '../lib/api'
 
 const DEFAULT_SIZE = 3
 const MAX_SIZE = 20
@@ -58,13 +58,10 @@ export default function Podium() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [{ data: g }, { data: t }] = await Promise.all([
-        supabase.from('games').select('id, name').eq('id', id).single(),
-        supabase.from('teams').select('id, name, color, score').eq('game_id', id),
-      ])
+      const { data } = await api.getGame(id)
       if (cancelled) return
-      setGame(g)
-      setTeams(t ?? [])
+      setGame(data ?? null)
+      setTeams(data?.teams ?? [])
       setLoading(false)
     })()
     return () => { cancelled = true }

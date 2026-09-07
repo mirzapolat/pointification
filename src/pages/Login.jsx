@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
-import { supabase } from '../lib/supabase'
 
 export default function Login() {
-  const { signIn, signUp, signOut, session, mfaRequired, aalLoading, refreshAal } = useAuth()
+  const { signIn, signUp, signOut, user, mfaRequired, verifyMfaCode } = useAuth()
   const nav = useNavigate()
   const [mode, setMode] = useState('signin')
   const [name, setName] = useState('')
@@ -16,8 +15,8 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (session && !aalLoading && !mfaRequired) nav('/', { replace: true })
-  }, [session, aalLoading, mfaRequired, nav])
+    if (user && !mfaRequired) nav('/', { replace: true })
+  }, [user, mfaRequired, nav])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -40,7 +39,7 @@ export default function Login() {
     }
   }
 
-  const showMfa = session && mfaRequired
+  const showMfa = user && mfaRequired
 
   return (
     <motion.div
@@ -65,8 +64,8 @@ export default function Login() {
 
         {showMfa ? (
           <MfaChallenge
+            onSubmit={verifyMfaCode}
             onCancel={async () => { await signOut() }}
-            onVerified={async () => { await refreshAal() }}
           />
         ) : (
           <>
@@ -147,38 +146,17 @@ export default function Login() {
   )
 }
 
-function MfaChallenge({ onCancel, onVerified }) {
-  const [factorId, setFactorId] = useState(null)
+function MfaChallenge({ onSubmit, onCancel }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const { data, error } = await supabase.auth.mfa.listFactors()
-      if (cancelled) return
-      if (error) { setErr(error.message); setLoading(false); return }
-      const verified = (data?.totp ?? []).find(f => f.status === 'verified')
-      if (!verified) {
-        setErr('No verified authenticator found for this account.')
-      } else {
-        setFactorId(verified.id)
-      }
-      setLoading(false)
-    })()
-    return () => { cancelled = true }
-  }, [])
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!factorId) return
     setErr(null); setBusy(true)
-    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: code.trim() })
+    const { error } = await onSubmit(code.trim())
     setBusy(false)
-    if (error) { setErr(error.message); return }
-    await onVerified()
+    if (error) setErr(error.message)
   }
 
   return (
@@ -188,42 +166,38 @@ function MfaChallenge({ onCancel, onVerified }) {
         <h2 className="font-display font-bold text-2xl">Enter your code</h2>
         <p className="text-sm text-ink/70 mt-1">Open your authenticator app and enter the 6-digit code for Pointification.</p>
       </div>
-      {loading ? (
-        <div className="text-sm text-ink/60">Loading…</div>
-      ) : (
-        <form onSubmit={submit} className="space-y-3">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={6}
-            autoFocus
-            value={code}
-            onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="123456"
-            className="input-chunk font-mono tracking-[0.4em] text-center text-xl"
-            aria-label="6-digit code"
-          />
-          {err && (
-            <div className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60">{err}</div>
-          )}
-          <button
-            type="submit"
-            disabled={busy || code.length !== 6 || !factorId}
-            className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60"
-          >
-            {busy ? 'verifying…' : 'Verify →'}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={busy}
-            className="btn-chunk w-full bg-white disabled:opacity-60"
-          >
-            Cancel & sign out
-          </button>
-        </form>
-      )}
+      <form onSubmit={submit} className="space-y-3">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={6}
+          autoFocus
+          value={code}
+          onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+          placeholder="123456"
+          className="input-chunk font-mono tracking-[0.4em] text-center text-xl"
+          aria-label="6-digit code"
+        />
+        {err && (
+          <div className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60">{err}</div>
+        )}
+        <button
+          type="submit"
+          disabled={busy || code.length !== 6}
+          className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60"
+        >
+          {busy ? 'verifying…' : 'Verify →'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="btn-chunk w-full bg-white disabled:opacity-60"
+        >
+          Cancel & sign out
+        </button>
+      </form>
     </div>
   )
 }

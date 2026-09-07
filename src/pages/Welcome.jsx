@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import * as api from '../lib/api'
 import { useAuth } from '../lib/auth.jsx'
 
 const ROLES = [
@@ -37,15 +37,12 @@ export default function Welcome() {
   const submit = async () => {
     if (!user) return
     setBusy(true); setErr(null)
-    const { error } = await supabase
-      .from('user_details')
-      .upsert({
-        id: user.id,
-        organization: organization.trim() || null,
-        role: role || null,
-        intended_use: intendedUse || null,
-        details_completed_at: new Date().toISOString()
-      })
+    const { error } = await api.saveUserDetails({
+      organization: organization.trim() || null,
+      role: role || null,
+      intended_use: intendedUse || null,
+      details_completed_at: new Date().toISOString(),
+    })
     setBusy(false)
     if (error) return setErr(error.message)
     await refreshDetails()
@@ -55,16 +52,16 @@ export default function Welcome() {
   const skip = async () => {
     if (!user) return
     setBusy(true); setErr(null)
-    const { error } = await supabase
-      .from('user_details')
-      .upsert({ id: user.id, details_completed_at: new Date().toISOString() })
+    const { error } = await api.saveUserDetails({
+      details_completed_at: new Date().toISOString(),
+    })
     setBusy(false)
     if (error) return setErr(error.message)
     await refreshDetails()
     nav('/onboarding', { replace: true })
   }
 
-  const displayName = user?.user_metadata?.display_name
+  const displayName = user?.display_name
 
   return (
     <motion.div

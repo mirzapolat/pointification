@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import * as api from '../lib/api'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
 
@@ -38,7 +38,7 @@ export default function Onboarding() {
     setErr(null)
     if (!gameName.trim()) return setErr('Give your game a name.')
     setBusy(true)
-    const { data, error } = await supabase.rpc('create_game', { p_name: gameName.trim() })
+    const { data, error } = await api.createGame(gameName.trim())
     setBusy(false)
     if (error) return setErr(error.message)
     setGameId(data.id)
@@ -60,10 +60,8 @@ export default function Onboarding() {
     const cleaned = teamDrafts.map(t => ({ ...t, name: t.name.trim() })).filter(t => t.name)
     if (cleaned.length < 2) return setErr('Add at least two teams to compete.')
     setBusy(true)
-    const rows = cleaned.map((t, i) => ({
-      game_id: gameId, name: t.name, color: t.color, position: i
-    }))
-    const { data, error } = await supabase.from('teams').insert(rows).select('id, name, color, score')
+    const rows = cleaned.map((t, i) => ({ name: t.name, color: t.color, position: i }))
+    const { data, error } = await api.createTeams(gameId, rows)
     setBusy(false)
     if (error) return setErr(error.message)
     setTeams(data ?? [])
@@ -72,14 +70,14 @@ export default function Onboarding() {
 
   const tap = async (teamId, delta) => {
     setTeams(ts => ts.map(t => t.id === teamId ? { ...t, score: (t.score ?? 0) + delta } : t))
-    const { error } = await supabase.rpc('apply_point_change', { p_team_id: teamId, p_delta: delta })
+    const { error } = await api.applyPointChange(teamId, delta)
     if (error) setErr(error.message)
   }
   const totalTaps = useMemo(() => teams.reduce((s, t) => s + Math.abs(t.score ?? 0), 0), [teams])
 
   const enableShare = async () => {
     setErr(null); setBusy(true)
-    const { data, error } = await supabase.rpc('set_game_sharing', { p_game_id: gameId, p_enabled: true })
+    const { data, error } = await api.setGameSharing(gameId, true)
     setBusy(false)
     if (error) return setErr(error.message)
     setPublicUrl(`${window.location.origin}/p/${data.public_token}`)
@@ -100,9 +98,9 @@ export default function Onboarding() {
   const finish = async () => {
     if (!user) return
     setBusy(true); setErr(null)
-    const { error } = await supabase
-      .from('user_details')
-      .upsert({ id: user.id, onboarding_completed_at: new Date().toISOString() })
+    const { error } = await api.saveUserDetails({
+      onboarding_completed_at: new Date().toISOString(),
+    })
     setBusy(false)
     if (error) return setErr(error.message)
     await refreshDetails()
@@ -112,9 +110,9 @@ export default function Onboarding() {
   const skipAll = async () => {
     if (!user) return
     setBusy(true); setErr(null)
-    const { error } = await supabase
-      .from('user_details')
-      .upsert({ id: user.id, onboarding_completed_at: new Date().toISOString() })
+    const { error } = await api.saveUserDetails({
+      onboarding_completed_at: new Date().toISOString(),
+    })
     setBusy(false)
     if (error) return setErr(error.message)
     await refreshDetails()

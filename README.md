@@ -22,49 +22,69 @@ No spreadsheets. No napkins. No arguments. Just points, popping into existence.
 
 # Getting Started
 
+Pointification is fully self-contained: one Node process serves the SPA, runs
+the API, and owns a SQLite database file. No external database, auth provider,
+or object store to sign up for.
+
 ### Run it locally (dev)
 
 ```bash
 git clone <your fork>
 cd pointification
 npm install
-cp .env.example .env   # fill in VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+cp .env.example .env   # optional: donate link, SMTP
+
+npm run dev:server     # API + SQLite on http://localhost:3000
 npm run dev            # Vite dev server on http://localhost:5173
 ```
 
-### Wire up the database
+Run both. Vite proxies `/api` and `/logos` to the API server, so the browser
+sees a single origin and the session cookie works exactly as in production.
+The database is created on first boot at `data/pointification.db`; uploaded
+logos land in `data/logos/`. Requires Node 24+ (for the built-in `node:sqlite`).
 
-```bash
-# install the Supabase CLI: https://supabase.com/docs/guides/local-development/cli/getting-started
-supabase login
-supabase link --project-ref <your-project-ref>
-supabase db push
-```
+### Email (optional)
 
-…or paste the migrations under `supabase/migrations/` into the SQL editor by hand.
+Signup normally emails a 6-digit verification code. If `SMTP_HOST` is unset the
+app skips that step entirely and confirms new accounts immediately — which is
+usually what you want on a private instance.
 
 # Self-hosting with Docker
 
-Pointification ships as a single container: a small Node server serves the built
-SPA and handles the two dynamic routes — `/api/og` for social-share images and
-`/p/:token` for rich link previews on shared scoreboards. Supabase stays a
-hosted/managed service; point the app at your project via env vars.
+Pointification ships as a single container. Everything that needs to persist —
+the SQLite database and uploaded logos — lives under `/data`, which compose
+bind-mounts to `./data`. Back up that directory and you have backed up the app.
 
 ```bash
-cp .env.example .env   # fill in your Supabase project values
-docker compose up --build
+cp .env.example .env   # optional: donate link, SMTP
+docker compose up --build -d
 # → http://localhost:3000
 ```
 
-> The `VITE_*` values are inlined into the SPA at build time, so rebuild the
-> image (`docker compose up --build`) whenever they change.
+> `VITE_*` values are inlined into the SPA at build time, so rebuild the image
+> (`docker compose up --build`) whenever they change.
 
 To run the production server without Docker:
 
 ```bash
 npm run build
-npm start              # serves dist/ on http://localhost:3000
+npm start              # serves dist/ + API on http://localhost:3000
 ```
+
+### How it fits together
+
+| Piece | Where it lives |
+| --- | --- |
+| Schema | `server/schema.sql` — applied on boot, idempotent |
+| API routes | `server/routes/` — auth, account, games, teams, rounds, public, realtime |
+| Live updates | Server-Sent Events (`server/lib/events.js` → `src/lib/realtime.js`) |
+| Sessions | httpOnly cookie, opaque token hashed at rest |
+| Passwords / 2FA | scrypt (`server/lib/auth.js`) and RFC 6238 TOTP (`server/lib/totp.js`) |
+| Logos | files under `LOGO_DIR`, served read-only from `/logos` |
+| Client API | `src/lib/api.js` — every call resolves to `{ data, error }` |
+
+Because live updates are an in-process pub/sub, the app is meant to run as a
+single instance. That is the one thing to revisit before scaling horizontally.
 
 # License
 

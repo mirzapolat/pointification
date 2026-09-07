@@ -1,9 +1,9 @@
 // Pointification server.
-// Serves the built SPA (dist/) and provides the two dynamic routes that used to
-// run as Vercel functions:
-//   GET /api/og        -> social-share PNG (1200x630)
-//   GET /p/:token      -> SPA shell with OG/Twitter meta injected per shared game
-// Everything else falls back to index.html so React Router can take over.
+//
+// One process does everything: it owns the SQLite database, exposes the JSON
+// API the SPA talks to, streams live score changes over SSE, stores uploaded
+// game logos on disk, serves the built SPA, and server-renders the share-link
+// meta tags so /p/:token gets a rich preview.
 
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
@@ -11,9 +11,23 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 import express from 'express'
-import { createClient } from '@supabase/supabase-js'
+import cookieParser from 'cookie-parser'
 
+import { DB_PATH } from './db.js'
+import { LOGO_DIR } from './lib/logos.js'
+import { attachUser, pruneSessions } from './lib/auth.js'
+import { errorHandler } from './lib/http.js'
+import { mailEnabled } from './lib/mail.js'
 import { renderOgImage } from './og.js'
+
+import authRoutes from './routes/auth.js'
+import accountRoutes from './routes/account.js'
+import gameRoutes from './routes/games.js'
+import teamRoutes from './routes/teams.js'
+import roundRoutes from './routes/rounds.js'
+import publicRoutes, { findPublicGame } from './routes/public.js'
+import realtimeRoutes from './routes/realtime.js'
+import { all } from './db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -24,14 +38,20 @@ const DIST_DIR = process.env.DIST_DIR
   : path.resolve(__dirname, '../dist')
 const INDEX_HTML = path.join(DIST_DIR, 'index.html')
 
-const SUPA_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-const SUPA_ANON = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
-
 // The SPA shell never changes at runtime, so read it once.
 const shellPromise = readFile(INDEX_HTML, 'utf8')
 
 const app = express()
 app.disable('x-powered-by')
+// Traefik terminates TLS in front of us; trust its forwarding headers so
+// secure cookies and absolute URLs come out right.
+app.set('trust proxy', true)
+
+app.use(cookieParser())
+// Logo uploads arrive as a raw image body; everything else is JSON.
+app.use('/api', express.raw({ type: 'image/*', limit: '4mb' }))
+app.use('/api', express.json({ limit: '1mb' }))
+app.use('/api', attachUser)
 
 function originOf(req) {
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0]
@@ -44,6 +64,15 @@ function esc(s) {
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ))
 }
+
+// --- API ------------------------------------------------------------------
+app.use('/api/auth', authRoutes)
+app.use('/api/account', accountRoutes)
+app.use('/api/games', gameRoutes)
+app.use('/api/teams', teamRoutes)
+app.use('/api/rounds', roundRoutes)
+app.use('/api/public', publicRoutes)
+app.use('/api/realtime', realtimeRoutes)
 
 // --- OG image -------------------------------------------------------------
 app.get('/api/og', async (req, res) => {
@@ -62,6 +91,24 @@ app.get('/api/og', async (req, res) => {
   }
 })
 
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown endpoint.' }))
+app.use('/api', errorHandler)
+
+// --- Uploaded logos -------------------------------------------------------
+app.use('/logos', express.static(LOGO_DIR, {
+  maxAge: '30d',
+  index: false,
+  dotfiles: 'ignore',
+  setHeaders: (res) => {
+    // These files are user-supplied. Stop the browser sniffing a type, and
+    // sandbox them so an uploaded SVG can't run script if opened directly.
+    res.setHeader('x-content-type-options', 'nosniff')
+    res.setHeader('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+  },
+}))
+// A missing logo is a missing file, not a route for the SPA to handle.
+app.use('/logos', (_req, res) => res.status(404).end())
+
 // --- Public share SSR (rich link previews) --------------------------------
 app.get('/p/:token', async (req, res) => {
   const token = String(req.params.token ?? '').trim()
@@ -72,31 +119,19 @@ app.get('/p/:token', async (req, res) => {
   let description = 'Watch a live scoreboard update in real time. No installs, no account needed.'
   let ogImageQuery = '?name=' + encodeURIComponent('Pointification')
 
-  if (token && SUPA_URL && SUPA_ANON) {
-    try {
-      const supabase = createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: false } })
-      const { data } = await supabase
-        .from('games')
-        .select('name, teams(name, score)')
-        .eq('public_token', token)
-        .eq('is_public', true)
-        .maybeSingle()
-      if (data?.name) {
-        const teams = data.teams ?? []
-        const top = [...teams].sort((a, b) => b.score - a.score)[0]
-        title = `${data.name} · live scoreboard`
-        description = [
-          `${teams.length} ${teams.length === 1 ? 'team' : 'teams'}`,
-          top ? `${top.name} leads with ${top.score}` : null,
-          'Live updates as scores change.',
-        ].filter(Boolean).join(' · ')
-        ogImageQuery =
-          '?name=' + encodeURIComponent(data.name) +
-          '&subtitle=' + encodeURIComponent(top ? `${top.name} leads with ${top.score}` : 'Live scoreboard')
-      }
-    } catch {
-      // fall through to defaults
-    }
+  const game = findPublicGame(token)
+  if (game) {
+    const teams = all('SELECT name, score FROM teams WHERE game_id = ?', game.id)
+    const top = [...teams].sort((a, b) => b.score - a.score)[0]
+    title = `${game.name} · live scoreboard`
+    description = [
+      `${teams.length} ${teams.length === 1 ? 'team' : 'teams'}`,
+      top ? `${top.name} leads with ${top.score}` : null,
+      'Live updates as scores change.',
+    ].filter(Boolean).join(' · ')
+    ogImageQuery =
+      '?name=' + encodeURIComponent(game.name) +
+      '&subtitle=' + encodeURIComponent(top ? `${top.name} leads with ${top.score}` : 'Live scoreboard')
   }
 
   const ogImage = `${base}/api/og${ogImageQuery}`
@@ -155,9 +190,17 @@ app.get('*', async (_req, res) => {
   }
 })
 
+app.use(errorHandler)
+
+// Expired sessions and verification codes are swept on boot, then hourly.
+pruneSessions()
+setInterval(pruneSessions, 3600_000).unref()
+
 createServer(app).listen(PORT, HOST, () => {
   console.log(`[pointification] serving ${DIST_DIR} on http://${HOST}:${PORT}`)
-  if (!SUPA_URL || !SUPA_ANON) {
-    console.warn('[pointification] SUPABASE_URL / SUPABASE_ANON_KEY not set — /p/:token previews will use defaults.')
+  console.log(`[pointification] database ${DB_PATH}`)
+  console.log(`[pointification] logos    ${LOGO_DIR}`)
+  if (!mailEnabled) {
+    console.log('[pointification] SMTP not configured — new accounts are verified automatically.')
   }
 })

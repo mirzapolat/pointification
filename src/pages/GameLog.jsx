@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import * as api from '../lib/api'
+import { subscribeToGame } from '../lib/realtime'
 
 const SCOPES = [
   { id: 'week', label: 'Week',    days: 7   },
@@ -22,56 +23,28 @@ export default function GameLog() {
   const [logs, setLogs] = useState([])
   const [scope, setScope] = useState('m1')
   const [loading, setLoading] = useState(true)
-  const [emailMap, setEmailMap] = useState({})
 
   const load = async () => {
-    const [{ data: g }, { data: t }, { data: l }] = await Promise.all([
-      supabase.from('games').select('id, name').eq('id', id).single(),
-      supabase.from('teams').select('id, name, color, score').eq('game_id', id).order('position'),
-      supabase.from('point_logs')
-        .select('id, team_id, user_id, delta, new_score, created_at')
-        .eq('game_id', id)
-        .order('created_at', { ascending: true })
+    const [{ data: g }, { data: l }] = await Promise.all([
+      api.getGame(id),
+      api.listLogs(id),
     ])
     setGame(g ?? null)
-    setTeams(t ?? [])
+    setTeams(g?.teams ?? [])
     setLogs(l ?? [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [id])
 
-  useEffect(() => {
-    const channel = supabase.channel(`logs:${id}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'point_logs', filter: `game_id=eq.${id}` },
-        (payload) => setLogs(prev => [...prev, payload.new]))
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'point_logs', filter: `game_id=eq.${id}` },
-        (payload) => setLogs(prev => prev.filter(l => l.id !== payload.old.id)))
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
-        load)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [id])
-
-  useEffect(() => {
-    const ids = Array.from(new Set(logs.map(l => l.user_id).filter(Boolean)))
-    const missing = ids.filter(i => !(i in emailMap))
-    if (!missing.length) return
-    let cancelled = false
-    ;(async () => {
-      const { data } = await supabase.from('profiles').select('id, email').in('id', missing)
-      if (cancelled || !data) return
-      setEmailMap(prev => {
-        const next = { ...prev }
-        for (const p of data) next[p.id] = p.email
-        return next
-      })
-    })()
-    return () => { cancelled = true }
-  }, [logs])
+  useEffect(() => subscribeToGame(id, {
+    point_logs: ({ type, row, old }) => {
+      setLogs(prev => type === 'DELETE'
+        ? prev.filter(l => l.id !== old.id)
+        : [...prev, row])
+    },
+    teams: load,
+  }), [id])
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map(t => [t.id, t])), [teams])
 
@@ -195,7 +168,7 @@ export default function GameLog() {
                 {filteredLogs.length}
               </span>
             </div>
-            <ActivityLog logs={filteredLogs} teamMap={teamMap} emailMap={emailMap} />
+            <ActivityLog logs={filteredLogs} teamMap={teamMap} />
           </div>
         </section>
       </main>
@@ -363,7 +336,7 @@ function Sparkline({ points, color }) {
 
 /* -------- activity log, grouped by day -------- */
 
-function ActivityLog({ logs, teamMap, emailMap }) {
+function ActivityLog({ logs, teamMap }) {
   if (logs.length === 0) {
     return (
       <div className="p-8 text-center">
@@ -400,7 +373,7 @@ function ActivityLog({ logs, teamMap, emailMap }) {
                     <div className="text-[11px] text-ink/55 truncate">
                       {formatTime(l.created_at)}
                       {l.user_id && (
-                        <> · <span className="font-mono">{emailMap[l.user_id] ?? '…'}</span></>
+                        <> · <span className="font-mono">{l.user_email ?? '…'}</span></>
                       )}
                     </div>
                   </div>

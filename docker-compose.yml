@@ -1,10 +1,12 @@
-# Pointification — single self-hosted container serving the SPA + dynamic routes.
-# Fronted by an external Traefik instance (TLS + routing managed outside this project).
-# Supabase itself is a hosted/managed service; configure it via the .env file
-# (compose reads .env in this directory automatically).
+# Pointification — single self-hosted container. It serves the SPA, runs the
+# API, and owns its SQLite database; there is no external database service.
+# Fronted by an external Traefik instance (TLS + routing managed outside this
+# project).
 #
-#   cp .env.example .env   # fill in your Supabase project values
+#   cp .env.example .env   # optional: donate link, SMTP
 #   docker compose up --build -d
+#
+# State (the SQLite file and uploaded logos) lives in ./data — back that up.
 
 services:
   pointification:
@@ -12,16 +14,21 @@ services:
       context: .
       args:
         # Inlined into the SPA bundle at build time (Vite).
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_DONATE_URL: ${VITE_DONATE_URL:-}
     image: pointification
     environment:
       NODE_ENV: production
       PORT: 3000
-      # Used by the server for /p/:token link previews (server-side reads).
-      SUPABASE_URL: ${VITE_SUPABASE_URL}
-      SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      DATABASE_PATH: /data/pointification.db
+      LOGO_DIR: /data/logos
+      # Optional: without SMTP, new accounts are verified automatically.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - ./data:/data
     expose:
       - "3000"
     networks:

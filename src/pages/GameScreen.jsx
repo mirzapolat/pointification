@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase, logoUrl } from '../lib/supabase'
+import * as api from '../lib/api'
+import { logoUrl } from '../lib/api'
+import { subscribeToGame } from '../lib/realtime'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import PointPopup from '../components/PointPopup.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
@@ -67,7 +69,7 @@ export default function GameScreen() {
   recomputeNetsRef.current = async () => {
     const rid = game?.current_round_id
     if (!game?.rounds_enabled || !rid) { setRoundNet({}); return }
-    const { data } = await supabase.from('point_logs').select('team_id, delta').eq('game_id', id).eq('round_id', rid)
+    const { data } = await api.listLogs(id, rid)
     const m = {}
     for (const r of data ?? []) m[r.team_id] = (m[r.team_id] ?? 0) + r.delta
     setRoundNet(m)
@@ -87,21 +89,17 @@ export default function GameScreen() {
     if (undoTimer.current) clearTimeout(undoTimer.current)
     setUndoArmed(false)
     setUndoBusy(true)
-    const { error } = await supabase.rpc('undo_last_point_change', { p_game_id: id })
+    const { error } = await api.undoLastPointChange(id)
     setUndoBusy(false)
     if (error) dialogs.alert({ title: 'Could not undo', message: error.message })
     // Score + log update arrive via realtime.
   }
 
   const load = async () => {
-    const [{ data: g }, { data: t }, { data: r }] = await Promise.all([
-      supabase.from('games').select('id, name, allow_negative, rounds_enabled, current_round_id, logo_path, logo_placement, logo_shape, logo_scale, point_presets, team_sort').eq('id', id).single(),
-      supabase.from('teams').select('id, name, color, score, position').eq('game_id', id).order('position'),
-      supabase.from('rounds').select('id, name, position').eq('game_id', id).order('position'),
-    ])
-    setGame(g ?? null)
-    setTeams(t ?? [])
-    setRounds(r ?? [])
+    const { data } = await api.getGame(id)
+    setGame(data ?? null)
+    setTeams(data?.teams ?? [])
+    setRounds(data?.rounds ?? [])
     setLoading(false)
   }
 
@@ -121,16 +119,13 @@ export default function GameScreen() {
 
   const setCurrentRound = async (roundId) => {
     setGame(g => g ? { ...g, current_round_id: roundId } : g)
-    const { error } = await supabase.from('games').update({ current_round_id: roundId }).eq('id', id)
+    const { error } = await api.updateGame(id, { current_round_id: roundId })
     if (error) dialogs.alert({ title: 'Could not switch round', message: error.message })
   }
 
   const addRound = async () => {
     const pos = rounds.length
-    const { data, error } = await supabase.from('rounds')
-      .insert({ game_id: id, name: `Round ${pos + 1}`, position: pos })
-      .select('id, name, position')
-      .single()
+    const { data, error } = await api.createRound(id, { name: `Round ${pos + 1}`, position: pos })
     if (error) { dialogs.alert({ title: 'Could not add round', message: error.message }); return }
     setRounds(rs => rs.some(r => r.id === data.id) ? rs : [...rs, data])
     setCurrentRound(data.id)
@@ -138,57 +133,46 @@ export default function GameScreen() {
 
   // Realtime: keep scores, team list, and game metadata in sync across viewers.
   useEffect(() => {
-    const channel = supabase.channel(`game:${id}`)
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
-        (payload) => {
-          setTeams(prev => {
-            const idx = prev.findIndex(t => t.id === payload.new.id)
-            if (idx === -1) return prev
-            const prevScore = prev[idx].score
-            const next = [...prev]
-            next[idx] = { ...next[idx], ...payload.new }
-            // Flash only if score actually changed (not, e.g., rename)
-            if (payload.new.score !== prevScore) {
-              setFlash(f => ({ ...f, [payload.new.id]: (f[payload.new.id] ?? 0) + 1 }))
-              // A score moved → the active round's nets may have changed.
-              recomputeNetsRef.current()
-            }
-            return next
-          })
+    return subscribeToGame(id, {
+      teams: ({ type, row, old }) => {
+        if (type === 'DELETE') {
+          setTeams(prev => prev.filter(t => t.id !== old.id))
+          setActive(a => (a === old.id ? null : a))
+          return
+        }
+        setTeams(prev => {
+          const idx = prev.findIndex(t => t.id === row.id)
+          if (idx === -1) {
+            return [...prev, row].sort((a, b) => a.position - b.position)
+          }
+          const prevScore = prev[idx].score
+          const next = [...prev]
+          next[idx] = { ...next[idx], ...row }
+          // Flash only if the score actually changed (not, e.g., a rename).
+          if (row.score !== prevScore) {
+            setFlash(f => ({ ...f, [row.id]: (f[row.id] ?? 0) + 1 }))
+            // A score moved → the active round's nets may have changed.
+            recomputeNetsRef.current()
+          }
+          return next
         })
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
-        (payload) => {
-          setTeams(prev => prev.some(t => t.id === payload.new.id)
-            ? prev
-            : [...prev, payload.new].sort((a, b) => a.position - b.position))
-        })
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'teams', filter: `game_id=eq.${id}` },
-        (payload) => {
-          setTeams(prev => prev.filter(t => t.id !== payload.old.id))
-          setActive(a => a === payload.old.id ? null : a)
-        })
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` },
-        (payload) => setGame(g => g ? { ...g, ...payload.new } : g))
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'games', filter: `id=eq.${id}` },
-        () => nav('/', { replace: true }))
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'rounds', filter: `game_id=eq.${id}` },
-        (payload) => setRounds(prev => prev.some(r => r.id === payload.new.id)
-          ? prev
-          : [...prev, payload.new].sort((a, b) => a.position - b.position)))
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'rounds', filter: `game_id=eq.${id}` },
-        (payload) => setRounds(prev => prev.map(r => r.id === payload.new.id ? { ...r, ...payload.new } : r).sort((a, b) => a.position - b.position)))
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'rounds', filter: `game_id=eq.${id}` },
-        (payload) => setRounds(prev => prev.filter(r => r.id !== payload.old.id)))
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+      },
+      games: ({ type, row }) => {
+        if (type === 'DELETE') { nav('/', { replace: true }); return }
+        setGame(g => (g ? { ...g, ...row } : g))
+      },
+      rounds: ({ type, row, old }) => {
+        if (type === 'DELETE') {
+          setRounds(prev => prev.filter(r => r.id !== old.id))
+          return
+        }
+        setRounds(prev => (
+          prev.some(r => r.id === row.id)
+            ? prev.map(r => (r.id === row.id ? { ...r, ...row } : r))
+            : [...prev, row]
+        ).sort((a, b) => a.position - b.position))
+      },
+    })
   }, [id, nav])
 
   const applyDelta = async (teamId, delta) => {
@@ -204,7 +188,7 @@ export default function GameScreen() {
     }))
     if (effective === 0) { setBusy(false); return }
     setFlash(f => ({ ...f, [teamId]: (f[teamId] ?? 0) + 1 }))
-    const { error } = await supabase.rpc('apply_point_change', { p_team_id: teamId, p_delta: delta })
+    const { error } = await api.applyPointChange(teamId, delta)
     if (error) {
       setTeams(prev => prev.map(t => t.id === teamId ? { ...t, score: t.score - effective } : t))
       dialogs.alert({ title: 'Could not apply', message: error.message })

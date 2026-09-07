@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { QRCodeSVG } from 'qrcode.react'
+import * as api from '../lib/api'
 import { useAuth } from '../lib/auth.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
 
@@ -59,27 +60,12 @@ function Banner({ kind, children }) {
 }
 
 function NameCard() {
-  const { user } = useAuth()
-  const [name, setName] = useState('')
-  const [original, setOriginal] = useState('')
-  const [loaded, setLoaded] = useState(false)
+  const { user, refresh } = useAuth()
+  const original = user?.display_name ?? ''
+  const [name, setName] = useState(original)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const [msg, setMsg] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const { data } = await supabase.from('profiles')
-        .select('display_name').eq('id', user.id).maybeSingle()
-      if (cancelled) return
-      const v = data?.display_name ?? user.user_metadata?.display_name ?? ''
-      setName(v)
-      setOriginal(v)
-      setLoaded(true)
-    })()
-    return () => { cancelled = true }
-  }, [user.id])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -89,13 +75,10 @@ function NameCard() {
     if (next === original) return setErr('Pick a different name.')
 
     setBusy(true)
-    const { error: metaErr } = await supabase.auth.updateUser({ data: { display_name: next } })
-    if (metaErr) { setBusy(false); return setErr(metaErr.message) }
-    const { error: profErr } = await supabase.from('profiles')
-      .update({ display_name: next }).eq('id', user.id)
+    const { error } = await api.updateAccount({ display_name: next })
     setBusy(false)
-    if (profErr) return setErr(profErr.message)
-    setOriginal(next)
+    if (error) return setErr(error.message)
+    await refresh()
     setMsg('Name updated.')
   }
 
@@ -105,11 +88,10 @@ function NameCard() {
         <input
           type="text" required
           value={name} onChange={e => setName(e.target.value)}
-          disabled={!loaded}
           placeholder="your name"
           className="input-chunk flex-1"
         />
-        <button disabled={busy || !loaded} className="btn-chunk bg-candy-mint disabled:opacity-60">
+        <button disabled={busy} className="btn-chunk bg-candy-mint disabled:opacity-60">
           {busy ? 'Updating…' : 'Update name'}
         </button>
       </form>
@@ -120,6 +102,7 @@ function NameCard() {
 }
 
 function EmailCard({ currentEmail }) {
+  const { refresh } = useAuth()
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -130,10 +113,12 @@ function EmailCard({ currentEmail }) {
     setErr(null); setMsg(null)
     if (!email || email === currentEmail) return setErr('Pick a different email.')
     setBusy(true)
-    const { error } = await supabase.rpc('change_my_email', { p_email: email })
+    const { error } = await api.changeEmail(email)
     setBusy(false)
-    if (error) setErr(error.message)
-    else { setMsg('Email updated.'); setEmail('') }
+    if (error) return setErr(error.message)
+    await refresh()
+    setMsg('Email updated.')
+    setEmail('')
   }
 
   return (
@@ -157,37 +142,24 @@ function EmailCard({ currentEmail }) {
 }
 
 function PrivacyCard() {
-  const { user } = useAuth()
-  const [allowInvites, setAllowInvites] = useState(true)
-  const [loaded, setLoaded] = useState(false)
+  const { user, refresh } = useAuth()
+  const [allowInvites, setAllowInvites] = useState(user?.allow_invites ?? true)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const { data } = await supabase.from('profiles')
-        .select('allow_invites').eq('id', user.id).single()
-      if (!cancelled) {
-        if (data) setAllowInvites(data.allow_invites)
-        setLoaded(true)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [user.id])
 
   const toggle = async () => {
     if (busy) return
     const next = !allowInvites
     setAllowInvites(next)
     setBusy(true); setErr(null)
-    const { error } = await supabase.from('profiles')
-      .update({ allow_invites: next }).eq('id', user.id)
+    const { error } = await api.updateAccount({ allow_invites: next })
     setBusy(false)
     if (error) {
       setAllowInvites(!next)
       setErr(error.message)
+      return
     }
+    await refresh()
   }
 
   return (
@@ -200,7 +172,7 @@ function PrivacyCard() {
         <button
           type="button"
           onClick={toggle}
-          disabled={!loaded || busy}
+          disabled={busy}
           aria-pressed={allowInvites}
           className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors disabled:opacity-60 shrink-0 ${allowInvites ? 'bg-candy-mint' : 'bg-white'}`}
         >
@@ -218,7 +190,6 @@ function PrivacyCard() {
 }
 
 function PasswordCard() {
-  const { user } = useAuth()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -233,15 +204,7 @@ function PasswordCard() {
     if (next !== confirm) return setErr('New passwords don\'t match.')
 
     setBusy(true)
-    // Re-verify current password by attempting a sign-in
-    const { error: verifyError } = await supabase.auth.signInWithPassword({
-      email: user.email, password: current
-    })
-    if (verifyError) {
-      setBusy(false)
-      return setErr('Current password is incorrect.')
-    }
-    const { error } = await supabase.auth.updateUser({ password: next })
+    const { error } = await api.changePassword(current, next)
     setBusy(false)
     if (error) setErr(error.message)
     else {
@@ -279,10 +242,10 @@ function PasswordCard() {
 }
 
 function TwoFactorCard() {
-  const { refreshAal } = useAuth()
-  const [factors, setFactors] = useState(null)
-  const [enrolling, setEnrolling] = useState(null)
-  const [disablingId, setDisablingId] = useState(null)
+  const { refresh } = useAuth()
+  const [enabled, setEnabled] = useState(null)   // null while loading
+  const [enrolling, setEnrolling] = useState(null) // { secret, uri }
+  const [disabling, setDisabling] = useState(false)
   const [code, setCode] = useState('')
   const [showSecret, setShowSecret] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -291,42 +254,26 @@ function TwoFactorCard() {
 
   const load = async () => {
     setErr(null)
-    const { data, error } = await supabase.auth.mfa.listFactors()
-    if (error) { setErr(error.message); setFactors([]); return }
-    setFactors(data?.totp ?? [])
+    const { data, error } = await api.getMfaStatus()
+    if (error) { setErr(error.message); setEnabled(false); return }
+    setEnabled(!!data.enabled)
   }
 
   useEffect(() => { load() }, [])
 
-  const verified = (factors ?? []).filter(f => f.status === 'verified')
-  const enabled = verified.length > 0
-
   const startEnroll = async () => {
     setErr(null); setMsg(null); setBusy(true)
-    try {
-      for (const f of (factors ?? []).filter(f => f.status === 'unverified')) {
-        await supabase.auth.mfa.unenroll({ factorId: f.id })
-      }
-      const friendlyName = `Pointification ${new Date().toISOString().slice(0, 10)}`
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName })
-      if (error) { setErr(error.message); return }
-      setEnrolling({
-        factorId: data.id,
-        qrCode: data.totp.qr_code,
-        secret: data.totp.secret,
-        uri: data.totp.uri,
-      })
-      setCode('')
-      setShowSecret(false)
-    } finally {
-      setBusy(false)
-    }
+    const { data, error } = await api.enrollMfa()
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setEnrolling({ secret: data.secret, uri: data.uri })
+    setCode('')
+    setShowSecret(false)
   }
 
   const cancelEnroll = async () => {
-    if (!enrolling) return
     setBusy(true)
-    try { await supabase.auth.mfa.unenroll({ factorId: enrolling.factorId }) } catch {/* noop */}
+    await api.cancelMfaEnrollment()
     setBusy(false)
     setEnrolling(null)
     setCode('')
@@ -335,55 +282,33 @@ function TwoFactorCard() {
 
   const finishEnroll = async (e) => {
     e.preventDefault()
-    if (!enrolling) return
     setErr(null); setBusy(true)
-    const { error } = await supabase.auth.mfa.challengeAndVerify({
-      factorId: enrolling.factorId,
-      code: code.trim(),
-    })
+    const { error } = await api.enableMfa(code.trim())
     setBusy(false)
     if (error) return setErr(error.message)
     setEnrolling(null)
     setCode('')
     setMsg('Two-factor authentication is on.')
     await load()
-    await refreshAal()
-  }
-
-  const startDisable = (id) => {
-    setDisablingId(id)
-    setCode('')
-    setErr(null); setMsg(null)
-  }
-
-  const cancelDisable = () => {
-    setDisablingId(null)
-    setCode('')
-    setErr(null)
+    await refresh()
   }
 
   const finishDisable = async (e) => {
     e.preventDefault()
-    if (!disablingId) return
     setErr(null); setBusy(true)
-    const { error: vErr } = await supabase.auth.mfa.challengeAndVerify({
-      factorId: disablingId,
-      code: code.trim(),
-    })
-    if (vErr) { setBusy(false); return setErr(vErr.message) }
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: disablingId })
+    const { error } = await api.disableMfa(code.trim())
     setBusy(false)
     if (error) return setErr(error.message)
-    setDisablingId(null)
+    setDisabling(false)
     setCode('')
     setMsg('Two-factor authentication turned off.')
     await load()
-    await refreshAal()
+    await refresh()
   }
 
   return (
     <Section title="Two-factor auth" accent="#4D7CFF">
-      {factors === null ? (
+      {enabled === null ? (
         <div className="text-sm text-ink/60">Loading…</div>
       ) : enrolling ? (
         <form onSubmit={finishEnroll} className="space-y-4">
@@ -394,7 +319,7 @@ function TwoFactorCard() {
           </ol>
           <div className="flex flex-col sm:flex-row gap-4 items-center">
             <div className="w-44 h-44 rounded-2xl border-2 border-ink bg-white p-2 grid place-items-center shrink-0">
-              <img src={enrolling.qrCode} alt="2FA QR code" className="w-full h-full" />
+              <QRCodeSVG value={enrolling.uri} size={152} level="M" />
             </div>
             <div className="flex-1 min-w-0 w-full">
               <button
@@ -428,7 +353,7 @@ function TwoFactorCard() {
           </div>
           <Banner kind="error">{err}</Banner>
         </form>
-      ) : disablingId ? (
+      ) : disabling ? (
         <form onSubmit={finishDisable} className="space-y-3">
           <p className="text-sm text-ink/80">
             Enter your current 6-digit code to turn off two-factor authentication.
@@ -441,7 +366,12 @@ function TwoFactorCard() {
             aria-label="6-digit code"
           />
           <div className="flex gap-2">
-            <button type="button" onClick={cancelDisable} disabled={busy} className="btn-chunk bg-white flex-1 disabled:opacity-60">
+            <button
+              type="button"
+              onClick={() => { setDisabling(false); setCode(''); setErr(null) }}
+              disabled={busy}
+              className="btn-chunk bg-white flex-1 disabled:opacity-60"
+            >
               Cancel
             </button>
             <button disabled={busy || code.length !== 6} className="btn-chunk bg-candy-pink text-white flex-1 disabled:opacity-60">
@@ -461,7 +391,7 @@ function TwoFactorCard() {
               <p className="text-xs text-ink/60 mt-1">You'll be asked for a code every time you sign in.</p>
             </div>
             <button
-              onClick={() => startDisable(verified[0].id)}
+              onClick={() => { setDisabling(true); setCode(''); setErr(null); setMsg(null) }}
               className="btn-chunk bg-white text-sm py-2 px-3 shrink-0"
             >
               Turn off
@@ -511,21 +441,8 @@ function DangerCard({ onDeleted }) {
     })
     if (!ok) return
     setBusy(true)
-    // Best-effort: wipe this user's logo folder before deleting the account.
-    // Storage RLS scopes objects under {user_id}/, so we can list and remove
-    // by user id alone.
-    try {
-      if (user?.id) {
-        const { data: gameFolders } = await supabase.storage.from('game-logos').list(user.id, { limit: 1000 })
-        const paths = []
-        for (const folder of gameFolders ?? []) {
-          const { data: files } = await supabase.storage.from('game-logos').list(`${user.id}/${folder.name}`, { limit: 100 })
-          for (const f of files ?? []) paths.push(`${user.id}/${folder.name}/${f.name}`)
-        }
-        if (paths.length) await supabase.storage.from('game-logos').remove(paths)
-      }
-    } catch {/* don't block account deletion on storage cleanup */}
-    const { error } = await supabase.rpc('delete_my_account')
+    // The server cascades the delete and clears this user's stored logos.
+    const { error } = await api.deleteAccount()
     setBusy(false)
     if (error) setErr(error.message)
     else onDeleted()

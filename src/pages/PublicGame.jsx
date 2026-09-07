@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase, logoUrl } from '../lib/supabase'
+import * as api from '../lib/api'
+import { logoUrl } from '../lib/api'
+import { subscribeToPublicGame } from '../lib/realtime'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import { LogoCenterBadge, LogoTopRow, sortTeams } from './GameScreen.jsx'
 
@@ -15,62 +17,46 @@ export default function PublicGame() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const { data: g } = await supabase
-        .from('games')
-        .select('id, name, public_token, is_public, logo_path, logo_placement, logo_shape, logo_scale, team_sort')
-        .eq('public_token', token)
-        .eq('is_public', true)
-        .maybeSingle()
+      const { data } = await api.getPublicGame(token)
       if (cancelled) return
-      if (!g) { setStatus('notfound'); return }
-      const { data: t } = await supabase
-        .from('teams')
-        .select('id, name, color, score, position')
-        .eq('game_id', g.id)
-        .order('position')
-      if (cancelled) return
-      setGame(g)
-      setTeams(t ?? [])
+      if (!data?.game) { setStatus('notfound'); return }
+      setGame(data.game)
+      setTeams(data.teams ?? [])
       setStatus('ok')
     })()
     return () => { cancelled = true }
   }, [token])
 
-  // Realtime: anon respects RLS, which allows reading public games + their teams.
+  // Realtime: the server only streams what a share link is allowed to show.
   useEffect(() => {
     if (!game?.id) return
-    const channel = supabase.channel(`public-game:${game.id}`)
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'teams', filter: `game_id=eq.${game.id}` },
-        (payload) => {
-          setTeams(prev => {
-            const idx = prev.findIndex(t => t.id === payload.new.id)
-            if (idx === -1) return prev
-            const prevScore = prev[idx].score
-            const next = [...prev]
-            next[idx] = { ...next[idx], ...payload.new }
-            if (payload.new.score !== prevScore) {
-              setFlash(f => ({ ...f, [payload.new.id]: (f[payload.new.id] ?? 0) + 1 }))
-            }
-            return next
-          })
+    return subscribeToPublicGame(token, {
+      teams: ({ type, row, old }) => {
+        if (type === 'DELETE') {
+          setTeams(prev => prev.filter(t => t.id !== old.id))
+          return
+        }
+        setTeams(prev => {
+          const idx = prev.findIndex(t => t.id === row.id)
+          if (idx === -1) return [...prev, row].sort((a, b) => a.position - b.position)
+          const prevScore = prev[idx].score
+          const next = [...prev]
+          next[idx] = { ...next[idx], ...row }
+          if (row.score !== prevScore) {
+            setFlash(f => ({ ...f, [row.id]: (f[row.id] ?? 0) + 1 }))
+          }
+          return next
         })
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'teams', filter: `game_id=eq.${game.id}` },
-        (payload) => setTeams(prev => prev.some(t => t.id === payload.new.id)
-          ? prev : [...prev, payload.new].sort((a, b) => a.position - b.position)))
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'teams', filter: `game_id=eq.${game.id}` },
-        (payload) => setTeams(prev => prev.filter(t => t.id !== payload.old.id)))
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${game.id}` },
-        (payload) => {
-          // Sharing was turned off, or token rotated → kick out
-          if (!payload.new.is_public || payload.new.public_token !== token) setStatus('notfound')
-          else setGame(g => ({ ...g, ...payload.new }))
-        })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+      },
+      games: ({ type, row }) => {
+        // Sharing was turned off, the token rotated, or the game deleted → kick out.
+        if (type === 'DELETE' || !row?.is_public || row.public_token !== token) {
+          setStatus('notfound')
+          return
+        }
+        setGame(g => ({ ...g, ...row }))
+      },
+    })
   }, [game?.id, token])
 
   const sortedTeams = useMemo(
