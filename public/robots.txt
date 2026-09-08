@@ -1,7 +1,9 @@
+# Public pages are available to search engines and AI search crawlers.
+# App and share pages send noindex headers; allow crawling to read those rules.
 User-agent: *
 Allow: /
-Disallow: /game/
-Disallow: /account
 Disallow: /api/
+Disallow: /logos/
+Disallow: /prerender/
 
 Sitemap: https://pointification.de/sitemap.xml

@@ -4,28 +4,28 @@ import { motion } from 'framer-motion'
 export default function Privacy() {
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full bg-cream bg-grid"
     >
       <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <Link to="/" className="flex items-center gap-3">
           <img src="/pointification.png" alt="Pointification" className="w-10 h-10 object-contain" />
-          <h1 className="font-display font-bold text-2xl">Pointification</h1>
+          <span className="font-display font-bold text-2xl">Pointification</span>
         </Link>
         <Link to="/login" className="btn-chunk bg-white text-sm">← Back</Link>
       </header>
 
       <main className="max-w-3xl mx-auto px-6 md:px-10 py-10 space-y-10">
         <div>
-          <h2 className="font-display text-4xl md:text-5xl font-bold mb-3">Privacy Policy</h2>
+          <h1 className="font-display text-4xl md:text-5xl font-bold mb-3">Privacy Policy</h1>
           <p className="text-ink/60">How Pointification handles your data, in plain language.</p>
         </div>
 
         <Section title="Who runs this service">
           <p>
             Pointification is operated by Mirza Polat. You can reach me through{' '}
-            <a href="https://mirzapolat.com" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
-              mirzapolat.com
+            <a href="mailto:kontakt@pointification.de" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
+              kontakt (at) pointification.de
             </a>.
           </p>
         </Section>
@@ -131,8 +131,8 @@ export default function Privacy() {
           </ul>
           <p>
             To exercise these rights, contact{' '}
-            <a href="https://mirzapolat.com" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
-              mirzapolat.com
+            <a href="mailto:kontakt@pointification.de" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
+              kontakt (at) pointification.de
             </a>
             .
           </p>

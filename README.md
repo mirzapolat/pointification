@@ -71,6 +71,31 @@ npm run build
 npm start              # serves dist/ + API on http://localhost:3000
 ```
 
+### Search and AI discovery
+
+`npm run build` pre-renders the homepage, imprint and privacy policy from the
+same React components used by the browser. The Node server serves these pages
+as complete HTML; JavaScript hydrates them and loads the signed-in experience.
+Use `npm start` to preview this production behavior (`vite preview` only serves
+the app shell and assets).
+
+`server/seo.js` defines public page metadata and homepage structured data. The
+build generates the sitemap from that public-page list. Keep the product copy,
+FAQ and structured data consistent when changing features or pricing.
+
+Search and AI crawlers can read public pages under the wildcard robots rule.
+Login, account, game and token-based share pages send `noindex` in both HTML
+and HTTP headers; their URLs are omitted from the sitemap. Share links retain
+game-specific social previews. Crawling app pages is allowed so crawlers can
+read `noindex`; authentication still controls access to private data.
+
+After deployment, submit `https://pointification.de/sitemap.xml` in Google
+Search Console and Bing Webmaster Tools, and inspect the homepage's rendered
+HTML. Hosting or firewall rules must also allow search crawlers. Indexing and
+AI citations depend on the search provider and are not guaranteed by these
+changes. See [Google's AI search guidance](https://developers.google.com/search/docs/appearance/ai-features)
+and [OpenAI's crawler documentation](https://developers.openai.com/api/docs/bots).
+
 ### How it fits together
 
 | Piece | Where it lives |

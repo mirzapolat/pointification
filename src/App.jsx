@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import Login from './pages/Login.jsx'
 import Verify from './pages/Verify.jsx'
@@ -14,6 +14,7 @@ import Podium from './pages/Podium.jsx'
 import Imprint from './pages/Imprint.jsx'
 import Privacy from './pages/Privacy.jsx'
 import Landing from './pages/Landing.jsx'
+import PageMetadata from './components/PageMetadata.jsx'
 import { DialogProvider } from './components/Dialogs.jsx'
 
 function needsWelcome(details) {
@@ -47,8 +48,7 @@ function Protected({ children, allow = 'app' }) {
 
 function Home() {
   const { user, loading, mfaRequired, details, detailsLoading } = useAuth()
-  if (loading) return <Splash />
-  if (!user) return <Landing />
+  if (loading || !user) return <Landing />
   if (mfaRequired) return <Navigate to="/login" replace />
   if (detailsLoading && !details) return <Splash />
   if (needsWelcome(details)) return <Navigate to="/welcome" replace />
@@ -67,6 +67,7 @@ function Splash() {
 export default function App() {
   return (
     <DialogProvider>
+      <PageMetadata />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<Verify />} />
@@ -83,7 +84,13 @@ export default function App() {
         <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
         <Route path="/game/:id/podium" element={<Protected><Podium /></Protected>} />
         <Route path="/account" element={<Protected><Account /></Protected>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={
+          <main className="min-h-full bg-cream bg-grid px-6 py-24 text-center">
+            <h1 className="font-display text-4xl font-bold">Page not found</h1>
+            <p className="mt-4 mb-8 text-ink/70">This page does not exist. Head back to Pointification to keep score.</p>
+            <Link to="/" className="btn-chunk bg-white">Back to Pointification</Link>
+          </main>
+        } />
       </Routes>
     </DialogProvider>
   )

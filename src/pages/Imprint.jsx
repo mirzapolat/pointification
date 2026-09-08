@@ -4,19 +4,19 @@ import { motion } from 'framer-motion'
 export default function Imprint() {
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full bg-cream bg-grid"
     >
       <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <Link to="/" className="flex items-center gap-3">
           <img src="/pointification.png" alt="Pointification" className="w-10 h-10 object-contain" />
-          <h1 className="font-display font-bold text-2xl">Pointification</h1>
+          <span className="font-display font-bold text-2xl">Pointification</span>
         </Link>
         <Link to="/login" className="btn-chunk bg-white text-sm">← Back</Link>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 md:px-10 py-10">
-        <h2 className="font-display text-4xl md:text-5xl font-bold mb-6">Imprint</h2>
+        <h1 className="font-display text-4xl md:text-5xl font-bold mb-6">Imprint</h1>
         <p className="text-ink/60 mb-8">Information according to § 5 TMG.</p>
 
         <section className="card-chunk p-6 md:p-8 space-y-6">

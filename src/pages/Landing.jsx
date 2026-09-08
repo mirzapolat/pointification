@@ -46,7 +46,7 @@ const FEATURES = [
 export default function Landing() {
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full bg-cream bg-grid relative overflow-hidden"
     >
       <Blobs />
@@ -55,6 +55,7 @@ export default function Landing() {
         <Hero />
         <Features />
         <HowItWorks />
+        <FAQ />
         <CTA />
       </main>
 
@@ -64,11 +65,11 @@ export default function Landing() {
 }
 
 function Hero() {
-  const { session } = useAuth()
+  const { user } = useAuth()
   return (
     <section className="text-center max-w-3xl mx-auto">
       <motion.div
-        initial={{ scale: 0.9, opacity: 0, rotate: -3 }}
+        initial={false}
         animate={{ scale: 1, opacity: 1, rotate: -2 }}
         transition={{ type: 'spring', stiffness: 160, damping: 14 }}
         className="inline-flex items-center gap-3 pl-4 pr-6 py-2.5 rounded-full border-2 border-ink bg-white shadow-chunk-sm text-base md:text-lg font-semibold mb-8 md:mb-10"
@@ -77,21 +78,31 @@ function Hero() {
         <span>Pointification</span>
       </motion.div>
 
-      <motion.h2
-        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+      <motion.h1
+        initial={false} animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.05 }}
         className="font-display font-bold text-5xl md:text-7xl leading-[1.05] tracking-tight"
       >
-        The scoreboard for{' '}
+        The online scoreboard for{' '}
         <span className="text-rainbow">game night.</span>
-      </motion.h2>
+      </motion.h1>
+      <p className="mt-6 text-lg md:text-xl text-ink/70 leading-relaxed max-w-2xl mx-auto">
+        Pointification is a free online scorekeeper for quiz nights, classroom
+        competitions and family games. Add teams, keep score together and share
+        a live scoreboard that anyone with the link can watch.
+      </p>
+      <nav aria-label="Explore Pointification" className="mt-6 flex flex-wrap justify-center gap-5 text-sm font-semibold underline underline-offset-4">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#faq">Questions & answers</a>
+      </nav>
 
       <motion.div
-        initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        initial={false} animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.2 }}
         className="mt-10 md:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4"
       >
-        {session ? (
+        {user ? (
           <Link to="/" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
             Go to dashboard →
           </Link>
@@ -120,7 +131,7 @@ function ScoreMock() {
   ]
   return (
     <motion.div
-      initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+      initial={false} animate={{ y: 0, opacity: 1 }}
       transition={{ delay: 0.4, type: 'spring', stiffness: 120, damping: 18 }}
       className="mt-16 md:mt-24 grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6 max-w-3xl mx-auto"
     >
@@ -145,7 +156,7 @@ function Features() {
   return (
     <section id="features" className="scroll-mt-24">
       <div className="text-center mb-12 md:mb-16">
-        <h3 className="font-display font-bold text-3xl md:text-5xl">Made for messy, loud rounds.</h3>
+        <h2 className="font-display font-bold text-3xl md:text-5xl">Made for messy, loud rounds.</h2>
         <p className="text-ink/60 mt-4 max-w-xl mx-auto">Everything you need to run a game, nothing you don't.</p>
       </div>
 
@@ -153,7 +164,7 @@ function Features() {
         {FEATURES.map((f, i) => (
           <motion.div
             key={f.title}
-            initial={{ y: 24, opacity: 0 }}
+            initial={false}
             whileInView={{ y: 0, opacity: 1 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ delay: i * 0.05, type: 'spring', stiffness: 180, damping: 20 }}
@@ -164,7 +175,7 @@ function Features() {
               {f.icon}
             </div>
             <div>
-              <h4 className="font-display font-bold text-xl">{f.title}</h4>
+              <h3 className="font-display font-bold text-xl">{f.title}</h3>
               <p className="text-ink/70 mt-2 leading-relaxed">{f.body}</p>
             </div>
           </motion.div>
@@ -183,14 +194,14 @@ function HowItWorks() {
   return (
     <section id="how" className="scroll-mt-24">
       <div className="text-center mb-12 md:mb-16">
-        <h3 className="font-display font-bold text-3xl md:text-5xl">Three steps. That's it.</h3>
+        <h2 className="font-display font-bold text-3xl md:text-5xl">Three steps. That's it.</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6 pt-2">
         {steps.map((s, i) => (
           <motion.div
             key={s.n}
-            initial={{ y: 20, opacity: 0 }}
+            initial={false}
             whileInView={{ y: 0, opacity: 1 }}
             viewport={{ once: true, margin: '-80px' }}
             transition={{ delay: i * 0.08 }}
@@ -199,7 +210,7 @@ function HowItWorks() {
             <div className="absolute -top-5 -left-5 w-12 h-12 rounded-2xl border-2 border-ink bg-ink text-cream font-display font-bold text-2xl grid place-items-center shadow-chunk-sm">
               {s.n}
             </div>
-            <h4 className="font-display font-bold text-xl mt-4">{s.title}</h4>
+            <h3 className="font-display font-bold text-xl mt-4">{s.title}</h3>
             <p className="text-ink/70 mt-2 leading-relaxed">{s.body}</p>
           </motion.div>
         ))}
@@ -208,28 +219,53 @@ function HowItWorks() {
   )
 }
 
+const QUESTIONS = [
+  ['Is Pointification free?', 'Yes. Pointification is free to use. Create an account to set up games, add teams and keep score in your browser.'],
+  ['What can I use the scoreboard for?', 'Use it for trivia and quiz nights, classroom team competitions, family board games or sports practice. You choose the teams and point values, so scoring can follow your own rules.'],
+  ['Do spectators need an account?', 'No. Share a read-only scoreboard link so spectators can follow live scores without signing in. Anyone with the link can view that scoreboard.'],
+  ['Can several people keep score together?', 'Yes. Invite collaborators by email so they can help update scores. Score changes appear live across connected devices.'],
+  ['Do I need to install an app?', 'No. Pointification runs in your web browser on a phone, tablet or computer. An internet connection is needed to sync scores and follow live updates.'],
+  ['Can I customize my scoreboard?', 'Yes. Choose team names and colors, upload a game logo, review point history and show a winner podium at the end.'],
+]
+
+function FAQ() {
+  return (
+    <section id="faq" className="scroll-mt-24 max-w-3xl mx-auto">
+      <h2 className="font-display font-bold text-3xl md:text-5xl text-center mb-10">Your scoreboard questions, answered.</h2>
+      <div className="space-y-4">
+        {QUESTIONS.map(([question, answer]) => (
+          <details key={question} className="card-chunk bg-white p-6">
+            <summary className="cursor-pointer font-display font-bold text-lg">{question}</summary>
+            <p className="mt-3 text-ink/70 leading-relaxed">{answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function CTA() {
-  const { session } = useAuth()
+  const { user } = useAuth()
   return (
     <section>
       <motion.div
-        initial={{ rotate: -1, scale: 0.96, opacity: 0 }}
+        initial={false}
         whileInView={{ rotate: -1, scale: 1, opacity: 1 }}
         viewport={{ once: true, margin: '-80px' }}
         transition={{ type: 'spring', stiffness: 140, damping: 16 }}
         className="card-chunk bg-candy-mint p-10 md:p-16 text-center relative overflow-hidden"
       >
         <div className="absolute inset-0 bg-dots opacity-20 pointer-events-none" />
-        <h3 className="relative font-display font-bold text-3xl md:text-5xl">
-          {session ? 'Back to the action.' : 'Ready to keep score?'}
-        </h3>
+        <h2 className="relative font-display font-bold text-3xl md:text-5xl">
+          {user ? 'Back to the action.' : 'Ready to keep score?'}
+        </h2>
         <p className="relative text-ink/70 mt-4 max-w-md mx-auto leading-relaxed">
-          {session
+          {user
             ? 'Your games are waiting on the dashboard.'
             : "It's free. Make an account, spin up a game, and start tapping."}
         </p>
         <div className="relative mt-8 md:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-          {session ? (
+          {user ? (
             <Link to="/" className="btn-chunk bg-candy-pink text-white text-lg w-full sm:w-auto">
               Go to dashboard →
             </Link>

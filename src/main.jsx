@@ -8,7 +8,7 @@ import './styles.css'
 
 initAnalytics()
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const app = (
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
@@ -17,3 +17,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </React.StrictMode>
 )
+
+const root = document.getElementById('root')
+if (root.dataset.prerendered === 'true') {
+  ReactDOM.hydrateRoot(root, app)
+} else {
+  ReactDOM.createRoot(root).render(app)
+}

@@ -19,6 +19,7 @@ import { attachUser, pruneSessions } from './lib/auth.js'
 import { errorHandler } from './lib/http.js'
 import { mailEnabled } from './lib/mail.js'
 import { renderOgImage } from './og.js'
+import { PUBLIC_PAGES, applyMetadata, pageMetadata } from './seo.js'
 
 import authRoutes from './routes/auth.js'
 import accountRoutes from './routes/account.js'
@@ -49,6 +50,10 @@ app.set('trust proxy', true)
 
 app.use(cookieParser())
 // Logo uploads arrive as a raw image body; everything else is JSON.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('x-robots-tag', 'noindex, nofollow')
+  next()
+})
 app.use('/api', express.raw({ type: 'image/*', limit: '4mb' }))
 app.use('/api', express.json({ limit: '1mb' }))
 app.use('/api', attachUser)
@@ -57,12 +62,6 @@ function originOf(req) {
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0]
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`)
   return `${proto}://${host}`
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ))
 }
 
 // --- API ------------------------------------------------------------------
@@ -102,6 +101,7 @@ app.use('/logos', express.static(LOGO_DIR, {
   setHeaders: (res) => {
     // These files are user-supplied. Stop the browser sniffing a type, and
     // sandbox them so an uploaded SVG can't run script if opened directly.
+    res.setHeader('x-robots-tag', 'noindex, nofollow')
     res.setHeader('x-content-type-options', 'nosniff')
     res.setHeader('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox")
   },
@@ -144,47 +144,48 @@ app.get('/p/:token', async (req, res) => {
     return
   }
 
-  const meta = `
-    <title>${esc(title)}</title>
-    <meta name="description" content="${esc(description)}" />
-    <link rel="canonical" href="${esc(pageUrl)}" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Pointification" />
-    <meta property="og:title" content="${esc(title)}" />
-    <meta property="og:description" content="${esc(description)}" />
-    <meta property="og:url" content="${esc(pageUrl)}" />
-    <meta property="og:image" content="${esc(ogImage)}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="${esc(title)}" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${esc(title)}" />
-    <meta name="twitter:description" content="${esc(description)}" />
-    <meta name="twitter:image" content="${esc(ogImage)}" />
-  `.trim()
+  const html = applyMetadata(shell, {
+    ...pageMetadata(req.path),
+    title, description, canonical: pageUrl, image: ogImage,
+    imageWidth: 1200, imageHeight: 630,
+  })
 
-  // Strip the static meta so the per-share meta wins, then inject before </head>.
-  const html = shell
-    .replace(/<title>[\s\S]*?<\/title>/i, '')
-    .replace(/<meta property="og:(title|description|image|image:width|image:height|image:alt|url|type|site_name)"[^>]*>/gi, '')
-    .replace(/<meta name="twitter:(card|title|description|image)"[^>]*>/gi, '')
-    .replace(/<meta name="description"[^>]*>/i, '')
-    .replace(/<link rel="canonical"[^>]*>/i, '')
-    .replace('</head>', meta + '\n</head>')
-
+  res.setHeader('x-robots-tag', 'noindex, nofollow')
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('cache-control', 'public, s-maxage=120, stale-while-revalidate=600')
-  res.status(200).send(html)
+  res.status(game ? 200 : 404).send(html)
 })
 
-// --- Static assets --------------------------------------------------------
+// --- Public pages: full HTML for visitors and crawlers alike ---------------
+const publicHtml = new Map()
+for (const pathname of Object.keys(PUBLIC_PAGES)) {
+  const name = pathname === '/' ? 'index' : pathname.slice(1)
+  publicHtml.set(pathname, readFile(path.join(DIST_DIR, 'prerender', `${name}.html`), 'utf8'))
+}
+
+app.get(['/landing', '/index.html'], (_req, res) => res.redirect(301, '/'))
+app.get(Object.keys(PUBLIC_PAGES), async (req, res, next) => {
+  const pathname = req.path.toLowerCase().replace(/\/+$/, '') || '/'
+  if (req.path !== pathname) return res.redirect(301, pathname)
+  try {
+    res.type('html').set('cache-control', 'public, max-age=0, must-revalidate')
+    res.send(await publicHtml.get(pathname))
+  } catch (err) { next(err) }
+})
+
+// Build artifacts are implementation details, not alternative indexable URLs.
+app.use('/prerender', (_req, res) => res.status(404).end())
 app.use(express.static(DIST_DIR, { index: false, maxAge: '1h' }))
 
-// --- SPA fallback ---------------------------------------------------------
-app.get('*', async (_req, res) => {
+// --- App routes and real 404 responses ------------------------------------
+const appRoute = /^\/(?:login|verify|welcome|onboarding|account|game\/[^/]+(?:\/(?:settings|log|podium))?)\/?$/
+app.get('*', async (req, res) => {
   try {
     res.setHeader('content-type', 'text/html; charset=utf-8')
-    res.status(200).send(await shellPromise)
+    res.setHeader('x-robots-tag', 'noindex, nofollow')
+    res.setHeader('cache-control', 'no-store')
+    const html = applyMetadata(await shellPromise, pageMetadata(req.path))
+    res.status(appRoute.test(req.path) ? 200 : 404).send(html)
   } catch {
     res.status(500).send('Could not load app shell')
   }
