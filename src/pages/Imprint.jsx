@@ -21,9 +21,13 @@ export default function Imprint() {
 
         <section className="card-chunk p-6 md:p-8 space-y-6">
           <Row label="Operator">Mirza Polat</Row>
+          <Row label="Address">
+            Dachauer Str. 159<br />
+            80636 München
+          </Row>
           <Row label="Contact">
-            <a href="https://mirzapolat.com" target="_blank" rel="noreferrer noopener" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
-              mirzapolat.com
+            <a href="mailto:kontakt@pointification.de" className="underline decoration-2 underline-offset-4 hover:text-candy-pink">
+              kontakt (at) pointification.de
             </a>
           </Row>
           <Row label="Responsible for content (§ 18 Abs. 2 MStV)">Mirza Polat</Row>
