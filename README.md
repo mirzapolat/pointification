@@ -1,120 +1,129 @@
-<img width="852" height="330" alt="Screenshot 2026-05-18 at 15 35 01" src="https://github.com/user-attachments/assets/9ec9bde3-08b4-4ab5-adf3-d4508a3f2a06" />
-
 # Pointification
 
-**Pointification** is a delightfully chunky, candy-colored point tracker that turns "wait, what's the score?" into the most satisfying tap of your evening. Built for trivia nights, classroom quizzes, sports practice, family game wars, and any moment that needs a number to go up (or down, if you've allowed that sort of thing).
+Pointification is a score tracker for quiz nights, games, classrooms, or anything
+else where you're keeping points. Create a game, add your teams, and update the
+scores as you go. You can invite other people to help keep score or share a
+read-only link for everyone watching.
 
-No spreadsheets. No napkins. No arguments. Just points, popping into existence.
+<img width="852" height="330" alt="Pointification scoreboard" src="https://github.com/user-attachments/assets/9ec9bde3-08b4-4ab5-adf3-d4508a3f2a06" />
 
-# Why you'll love it
+Teams have their own colors, games can have a custom logo, and every score change
+is recorded in the history. Scores update live across connected devices. People
+viewing a shared scoreboard don't need an account.
 
-🎲 **Tap to score** — full-screen team rows, one tap opens a popup with `+5 / +10 / +15 / -5 / -10 / -15` and custom amounts. Each tap flashes. Yes, it feels good.
+## How it runs
 
-🌈 **Bring your own colors** — pick from a curated palette or punch in any hex you want. Make Team Pink Pandas actually pink.
+The app uses React and Vite on the frontend, with an Express server and SQLite
+behind it. One Node process serves the site, handles accounts, stores data, and
+sends live updates over Server-Sent Events. Uploaded logos are saved on disk.
 
-🖼️ **Slap a logo on it** — upload a logo and choose how it lives: a chunky badge in the middle of the screen, a wide top row banner, or just decoratively on the game card. Round or rounded-square. Scale it up to crop out whitespace, scale it down for a roomier bubble.
+There is no Supabase dependency or external database to set up. Email is optional.
+The app is designed to run as a single server instance; live updates are shared
+within that process.
 
-🤝 **Play together, live** — invite collaborators by email. Anyone at the table can keep score. Realtime updates everywhere — every device sees the same number at the same time.
+## Local development
 
-🔗 **Share a public link** — generate a read-only scoreboard URL. Friends, parents, that one cousin watching from the couch — they all see the live score, no account needed.
-
-📜 **Every point is logged** — full history with delta and timestamp. Settle every debate.
-
-# Getting Started
-
-Pointification is fully self-contained: one Node process serves the SPA, runs
-the API, and owns a SQLite database file. No external database, auth provider,
-or object store to sign up for.
-
-### Run it locally (dev)
-
-```bash
-git clone <your fork>
-cd pointification
-npm install
-cp .env.example .env   # optional: donate link, SMTP
-
-npm run dev:server     # API + SQLite on http://localhost:3000
-npm run dev            # Vite dev server on http://localhost:5173
-```
-
-Run both. Vite proxies `/api` and `/logos` to the API server, so the browser
-sees a single origin and the session cookie works exactly as in production.
-The database is created on first boot at `data/pointification.db`; uploaded
-logos land in `data/logos/`. Requires Node 24+ (for the built-in `node:sqlite`).
-
-### Email (optional)
-
-Signup normally emails a 6-digit verification code. If `SMTP_HOST` is unset the
-app skips that step entirely and confirms new accounts immediately — which is
-usually what you want on a private instance.
-
-# Self-hosting with Docker
-
-Pointification ships as a single container. Everything that needs to persist —
-the SQLite database and uploaded logos — lives under `/data`, which compose
-bind-mounts to `./data`. Back up that directory and you have backed up the app.
+You'll need **Node.js 24 or newer**. From the project directory, install the
+dependencies and build the initial pages:
 
 ```bash
-cp .env.example .env   # optional: donate link, SMTP
-docker compose up --build -d
-# → http://localhost:3000
+npm ci
+npm run build
 ```
 
-> `VITE_*` values are inlined into the SPA at build time, so rebuild the image
-> (`docker compose up --build`) whenever they change.
+Start the API server:
 
-To run the production server without Docker:
+```bash
+npm run dev:server
+```
+
+Then, in another terminal, start Vite:
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:5173**. Vite forwards API requests and logo uploads to the
+Node server on port 3000. The database is created automatically on first startup
+at `data/pointification.db`, and uploaded logos go into `data/logos/`.
+
+To view the production build locally, stop the development API server and run:
 
 ```bash
 npm run build
-npm start              # serves dist/ + API on http://localhost:3000
+npm start
 ```
 
-### Search and AI discovery
+Open **http://localhost:3000**. Use this to check the rendered public pages and
+share previews; `npm run preview` only serves the frontend build.
 
-`npm run build` pre-renders the homepage, imprint and privacy policy from the
-same React components used by the browser. The Node server serves these pages
-as complete HTML; JavaScript hydrates them and loads the signed-in experience.
-Use `npm start` to preview this production behavior (`vite preview` only serves
-the app shell and assets).
+## Deployment
 
-`server/seo.js` defines public page metadata and homepage structured data. The
-build generates the sitemap from that public-page list. Keep the product copy,
-FAQ and structured data consistent when changing features or pricing.
+The Docker image includes the frontend, API, and database runtime. The included
+Compose file is configured for this project's hosting setup: an existing Traefik
+proxy on the external `home` network, serving `pointification.de` over HTTPS. It
+also references the `secure-headers` and `compress` Traefik middlewares and the
+`letsencrypt` certificate resolver.
 
-Search and AI crawlers can read public pages under the wildcard robots rule.
-Login, account, game and token-based share pages send `noindex` in both HTML
-and HTTP headers; their URLs are omitted from the sitemap. Share links retain
-game-specific social previews. Crawling app pages is allowed so crawlers can
-read `noindex`; authentication still controls access to private data.
+If you're using that setup, start it with:
 
-After deployment, submit `https://pointification.de/sitemap.xml` in Google
-Search Console and Bing Webmaster Tools, and inspect the homepage's rendered
-HTML. Hosting or firewall rules must also allow search crawlers. Indexing and
-AI citations depend on the search provider and are not guaranteed by these
-changes. See [Google's AI search guidance](https://developers.google.com/search/docs/appearance/ai-features)
-and [OpenAI's crawler documentation](https://developers.openai.com/api/docs/bots).
+```bash
+cp .env.example .env
+# Edit .env if you want to configure email or the donate link.
+docker compose up --build -d
+```
 
-### How it fits together
+For a different host, adjust the domain, proxy labels, and network in
+`docker-compose.yml` first. Compose exposes port 3000 to the proxy; it does not
+publish a port on localhost. Production sessions use secure cookies, so serve
+the app over HTTPS.
 
-| Piece | Where it lives |
+The container stores its database and logos under `/data`, mounted from `./data`
+on the host. Keep that directory when replacing or rebuilding the container.
+To make a simple backup, stop the app briefly and copy the whole directory.
+
+## Configuration
+
+The defaults are enough to run locally. The optional settings are listed in
+[.env.example](.env.example).
+
+| Setting | Purpose |
 | --- | --- |
-| Schema | `server/schema.sql` — applied on boot, idempotent |
-| API routes | `server/routes/` — auth, account, games, teams, rounds, public, realtime |
-| Live updates | Server-Sent Events (`server/lib/events.js` → `src/lib/realtime.js`) |
-| Sessions | httpOnly cookie, opaque token hashed at rest |
-| Passwords / 2FA | scrypt (`server/lib/auth.js`) and RFC 6238 TOTP (`server/lib/totp.js`) |
-| Logos | files under `LOGO_DIR`, served read-only from `/logos` |
-| Client API | `src/lib/api.js` — every call resolves to `{ data, error }` |
+| `VITE_DONATE_URL` | URL for the support button. Leave it empty to hide the button. |
+| `SMTP_HOST` | Mail server for signup verification codes. Without it, new accounts are verified immediately. |
+| `SMTP_PORT` | Mail server port; defaults to `587`. Port `465` uses TLS from the start. |
+| `SMTP_USER`, `SMTP_PASS` | Mail server credentials, if required. |
+| `SMTP_FROM` | Sender address for verification emails. |
+| `DATABASE_PATH` | SQLite file location. Defaults to `data/pointification.db` when running directly. |
+| `LOGO_DIR` | Upload directory. Defaults to `data/logos/` when running directly. |
+| `PORT` | Node server port; defaults to `3000`. Compose sets this to `3000` inside the container. |
 
-Because live updates are an in-process pub/sub, the app is meant to run as a
-single instance. That is the one thing to revisit before scaling horizontally.
+Compose reads `.env` and passes the relevant settings to the container. When
+running Node directly, export server settings in your shell; the npm server
+commands don't load `.env` automatically. The `/data` paths in `.env.example`
+are intended for Docker.
 
-# License
+Vite reads `VITE_DONATE_URL` at build time, so rebuild after changing it. If you
+change the API port during development, set `VITE_API_TARGET` for Vite to the
+matching address.
 
-**Pointification is proprietary software.** All rights reserved by the author.
+## Finding your way around
 
-This repository is public for viewing only. You **may not** copy, fork, run, deploy, modify, redistribute, or build derivative works from this code — in whole or in part, commercial or non-commercial — without prior written permission from the author. See [LICENSE](LICENSE) for the full terms.
+- `src/` contains the React pages and components.
+- `src/lib/api.js` is the frontend API client; `src/lib/realtime.js` handles live updates.
+- `server/routes/` handles accounts, games, teams, rounds, and public scoreboards.
+- `server/schema.sql` defines the database tables and is applied on startup.
+- `server/lib/` contains authentication, two-factor authentication, email, uploads, and live events.
+- `server/seo.js` defines public page metadata and structured data.
+- `scripts/prerender.mjs` generates the public HTML pages and sitemap during the build.
 
-If you'd like to use, license, or collaborate on Pointification, please get in touch first.
+The homepage, imprint, and privacy policy are rendered at build time. Account,
+game, and share pages are marked `noindex` and left out of the sitemap. Public
+share links still get game-specific previews when posted elsewhere.
+
+## License
+
+Pointification is proprietary software by Mirza Polat. The repository is public
+for viewing, but running, copying, modifying, deploying, or redistributing it
+requires prior written permission. The setup notes above are for authorized use.
+See [LICENSE](LICENSE) for the full terms.
