@@ -122,7 +122,7 @@ export default function Onboarding() {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="min-h-full bg-cream bg-grid relative overflow-hidden flex flex-col items-center px-4 py-8"
+      className="min-h-full bg-cream bg-grid relative overflow-hidden flex flex-col items-center px-4 pt-8 pb-safe [--pb:2rem]"
     >
       <Blobs />
 

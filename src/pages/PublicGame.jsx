@@ -7,6 +7,7 @@ import { subscribeToPublicGame } from '../lib/realtime'
 import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import { LogoCenterBadge, LogoTopRow, sortTeams } from './GameScreen.jsx'
 import { track } from '../lib/analytics.js'
+import { useWakeLock } from '../lib/pwa.js'
 
 export default function PublicGame() {
   const { token } = useParams()
@@ -14,6 +15,7 @@ export default function PublicGame() {
   const [teams, setTeams] = useState([])
   const [status, setStatus] = useState('loading') // loading | ok | notfound
   const [flash, setFlash] = useState({})
+  useWakeLock(status === 'ok')
 
   useEffect(() => {
     let cancelled = false
@@ -89,7 +91,7 @@ export default function PublicGame() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 flex flex-col bg-ink">
-      <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
+      <header className="shrink-0 px-safe [--px:1rem] md:[--px:1.5rem] py-3 flex items-center justify-between bg-cream border-b-2 border-ink z-10">
         <Link
           to="/landing"
           aria-label="Make your own scoreboard at Pointification"
@@ -114,7 +116,7 @@ export default function PublicGame() {
         {sortedTeams.length === 0
           ? <div className="flex-1 grid place-items-center text-cream/70 font-display text-xl">No teams yet.</div>
           : sortedTeams.map((t, i) => (
-              <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} compact={showCenter} />
+              <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} compact={showCenter} isLast={i === sortedTeams.length - 1} />
             ))}
         {showCenter && <LogoCenterBadge src={logoSrc} shape={game.logo_shape} scale={game.logo_scale} />}
       </div>
@@ -122,8 +124,8 @@ export default function PublicGame() {
   )
 }
 
-function Row({ team, index, flashKey, compact }) {
-  const padX = compact ? 'pl-6 pr-6 md:pl-12 md:pr-12' : 'px-6 md:px-12'
+function Row({ team, index, flashKey, compact, isLast }) {
+  const padX = `px-safe [--px:1.5rem] md:[--px:3rem] ${isLast ? 'pb-home' : 'border-b-2'}`
   const nameSize = compact
     ? 'text-2xl sm:text-3xl md:text-5xl lg:text-6xl'
     : 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
@@ -139,7 +141,7 @@ function Row({ team, index, flashKey, compact }) {
         default: { type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 },
         layout: { type: 'spring', stiffness: 260, damping: 26 },
       }}
-      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-b-2 border-ink last:border-b-0 overflow-hidden`}
+      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-ink overflow-hidden`}
       style={{ background: team.color }}
     >
       <AnimatePresence>

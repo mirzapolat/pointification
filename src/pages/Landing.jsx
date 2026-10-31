@@ -287,7 +287,7 @@ function CTA() {
 
 function Footer() {
   return (
-    <footer className="relative z-10 border-t-2 border-ink bg-cream/80 backdrop-blur">
+    <footer className="relative z-10 border-t-2 border-ink bg-cream/80 backdrop-blur pb-home">
       <div className="max-w-6xl mx-auto px-5 md:px-10 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
         <div className="flex items-center gap-2">
           <img src="/pointification.png" alt="" className="w-6 h-6 object-contain" />

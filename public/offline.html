@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#FFF8EC" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Offline | Pointification</title>
+    <link rel="icon" type="image/png" href="/pointification.png" />
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid; place-items: center; padding: 24px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        background: #FFF8EC; color: #0F0F12;
+        background-image:
+          linear-gradient(to right, rgba(15,15,18,0.06) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(15,15,18,0.06) 1px, transparent 1px);
+        background-size: 32px 32px;
+      }
+      .card {
+        max-width: 420px; width: 100%; text-align: center; padding: 32px 28px;
+        background: #fff; border: 2px solid #0F0F12; border-radius: 24px;
+        box-shadow: 6px 6px 0 0 #0F0F12;
+      }
+      img { width: 72px; height: 72px; transform: rotate(-6deg); }
+      h1 { font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 28px; margin: 16px 0 8px; }
+      p { margin: 0 0 24px; color: rgba(15,15,18,0.65); line-height: 1.5; }
+      button {
+        font: 600 16px 'Space Grotesk', system-ui, sans-serif; color: #0F0F12; cursor: pointer;
+        padding: 12px 22px; border-radius: 16px; border: 2px solid #0F0F12; background: #5EE2C1;
+        box-shadow: 6px 6px 0 0 #0F0F12; transition: transform .1s, box-shadow .1s;
+      }
+      button:active { transform: translate(3px, 3px); box-shadow: none; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <img src="/pointification.png" alt="" />
+      <h1>You're offline</h1>
+      <p>Scores are live, so Pointification needs a connection. We'll pick up right where you left off once you're back.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+    <script>
+      window.addEventListener('online', () => location.reload())
+    </script>
+  </body>
+</html>

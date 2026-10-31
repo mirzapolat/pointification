@@ -16,6 +16,7 @@ import Privacy from './pages/Privacy.jsx'
 import Landing from './pages/Landing.jsx'
 import PageMetadata from './components/PageMetadata.jsx'
 import { DialogProvider } from './components/Dialogs.jsx'
+import { UpdateToast } from './components/InstallApp.jsx'
 
 function needsWelcome(details) {
   return !details || !details.details_completed_at
@@ -68,6 +69,7 @@ export default function App() {
   return (
     <DialogProvider>
       <PageMetadata />
+      <UpdateToast />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<Verify />} />

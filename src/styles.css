@@ -12,6 +12,7 @@ html, body, #root {
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
   background: #FFF8EC;
   color: #0F0F12;
   -webkit-font-smoothing: antialiased;
@@ -60,4 +61,48 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Installed app (PWA): feel native — no rubber-band pull-to-refresh, no
+   accidental text selection on long-press of buttons. */
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: none; }
+  button, a { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+}
+
+/* Checkerboard behind images so transparent areas read as transparent. */
+.bg-checker {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #EDE6D9 25%, transparent 25%),
+    linear-gradient(-45deg, #EDE6D9 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #EDE6D9 75%),
+    linear-gradient(-45deg, transparent 75%, #EDE6D9 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+}
+
+/* --- Safe areas -------------------------------------------------------------
+   With viewport-fit=cover (and as an installed app) the page runs edge to
+   edge: under the notch, the home indicator and the rounded display corners.
+   Many Android phones report a 0 inset despite rounded corners, so every
+   utility keeps a minimum clearance and only grows with the real inset.
+   Override the minimum per element with the matching variable, e.g.
+   `px-safe [--px:1.5rem] md:[--px:3rem]`. */
+@layer utilities {
+  .px-safe {
+    padding-left: max(var(--px, 1rem), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--px, 1rem), env(safe-area-inset-right, 0px));
+  }
+  .pb-safe {
+    padding-bottom: max(var(--pb, 1.25rem), calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  }
+  .bottom-safe {
+    bottom: max(var(--b, 1.25rem), calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  }
+  /* Extra room at the end of scrolling pages and edge-to-edge colour bands:
+     the background still reaches the edge, the content clears the home bar. */
+  .pb-home {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }

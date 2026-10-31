@@ -9,6 +9,7 @@ import AnimatedNumber from '../components/AnimatedNumber.jsx'
 import PointPopup from '../components/PointPopup.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
 import { trackFirstScore } from '../lib/analytics.js'
+import { useWakeLock } from '../lib/pwa.js'
 
 export default function GameScreen() {
   const { id } = useParams()
@@ -28,6 +29,7 @@ export default function GameScreen() {
   const roundBtnRef = useRef(null)
   const undoTimer = useRef(null)
   const dialogs = useDialogs()
+  useWakeLock(!!game)
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)')
@@ -268,7 +270,7 @@ export default function GameScreen() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 flex flex-col bg-ink">
       {/* top bar */}
-      <header className="shrink-0 px-4 md:px-6 py-3 flex items-center justify-between gap-3 bg-cream border-b-2 border-ink z-10">
+      <header className="shrink-0 px-safe [--px:1rem] md:[--px:1.5rem] py-3 flex items-center justify-between gap-3 bg-cream border-b-2 border-ink z-10">
         <button onClick={() => nav('/')} className="btn-chunk bg-white text-sm py-2 px-3 shrink-0">← Games</button>
         <div className="flex items-center gap-3 min-w-0 flex-1 justify-center">
           <h1 className="font-display font-bold text-xl md:text-2xl truncate">{game.name}</h1>
@@ -305,7 +307,7 @@ export default function GameScreen() {
 
       {/* round switcher — its own bar on narrow screens, in the header otherwise */}
       {roundsOn && !isWide && (
-        <div className="shrink-0 px-3 py-2 flex items-center justify-center bg-cream border-b-2 border-ink z-10">
+        <div className="shrink-0 px-safe [--px:0.75rem] py-2 flex items-center justify-center bg-cream border-b-2 border-ink z-10">
           {roundControls}
         </div>
       )}
@@ -361,6 +363,7 @@ export default function GameScreen() {
             index={i}
             flashKey={flash[t.id] ?? 0}
             onClick={() => setActive(t.id)}
+            isLast={i === sortedTeams.length - 1}
             compact={showCenter}
             showRound={roundsOn}
             roundDelta={roundNet[t.id] ?? 0}
@@ -384,12 +387,10 @@ export default function GameScreen() {
   )
 }
 
-function TeamRow({ team, index, flashKey, onClick, compact, showRound, roundDelta }) {
-  // In compact mode, leave a clear gutter around the centered logo so the
-  // big team name / score don't slide under the bubble.
-  const padX = compact
-    ? 'pl-6 pr-6 md:pl-12 md:pr-12'
-    : 'px-6 md:px-12'
+function TeamRow({ team, index, flashKey, onClick, compact, showRound, roundDelta, isLast }) {
+  // Rows bleed to the screen edges; their content stays clear of the notch in
+  // landscape and, on the last row, of the home indicator / rounded corners.
+  const padX = `px-safe [--px:1.5rem] md:[--px:3rem] ${isLast ? 'pb-home' : 'border-b-2'}`
   const nameSize = compact
     ? 'text-2xl sm:text-3xl md:text-5xl lg:text-6xl'
     : 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
@@ -407,7 +408,7 @@ function TeamRow({ team, index, flashKey, onClick, compact, showRound, roundDelt
         layout: { type: 'spring', stiffness: 260, damping: 26 },
       }}
       whileTap={{ scale: 0.995 }}
-      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-b-2 border-ink last:border-b-0 overflow-hidden text-left`}
+      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-ink overflow-hidden text-left`}
       style={{ background: team.color }}
     >
       <AnimatePresence>
@@ -489,7 +490,7 @@ export function LogoTopRow({ src }) {
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 160, damping: 18 }}
-      className="flex-1 min-h-0 bg-white border-b-2 border-ink px-6 md:px-12 py-3 md:py-5"
+      className="flex-1 min-h-0 bg-white border-b-2 border-ink px-safe [--px:1.5rem] md:[--px:3rem] py-3 md:py-5"
     >
       <img
         src={src}

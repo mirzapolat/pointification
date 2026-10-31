@@ -79,7 +79,7 @@ export default function GameLog() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="min-h-full bg-cream bg-grid">
+      className="min-h-full pb-home bg-cream bg-grid">
       <header className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between gap-3 bg-cream/80 backdrop-blur border-b-2 border-ink sticky top-0 z-20">
         <button
           onClick={() => nav('/')}

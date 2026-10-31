@@ -5,7 +5,7 @@ export default function Privacy() {
   return (
     <motion.div
       initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="min-h-full bg-cream bg-grid"
+      className="min-h-full pb-home bg-cream bg-grid"
     >
       <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <Link to="/" className="flex items-center gap-3">

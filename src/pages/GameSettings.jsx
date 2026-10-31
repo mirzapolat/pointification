@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -10,6 +10,9 @@ import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE, nextColor } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
 import { track } from '../lib/analytics.js'
+
+// The crop dialog pulls in react-easy-crop; only load it when someone picks a logo.
+const LogoCropper = lazy(() => import('../components/LogoCropper.jsx'))
 
 const DEFAULT_PRESETS = [5, 10, 15, -5, -10, -15]
 const MAX_PRESETS = 24
@@ -286,21 +289,24 @@ function SettingsForm({ initial, user, nav }) {
       // New-game flow: hold the file until create.
       setPendingFile(file)
       setPendingPreview(file ? URL.createObjectURL(file) : null)
-      return
+      setLogoScale(1)
+      return true
     }
-    if (!file) return
+    if (!file) return false
     setLogoBusy(true)
     // The server stores the file, swaps out the previous one, and returns the
     // updated game — so placement comes back already resolved.
     const { data, error } = await api.uploadGameLogo(initial.id, file)
-    if (error) { setLogoBusy(false); setErr(error.message); return }
+    if (error) { setLogoBusy(false); setErr(error.message); return false }
     setLogoPath(data.logo_path)
+    setLogoScale(data.logo_scale ?? 1)
     // The server defaults placement to 'center' for a first upload; honour the
     // choice already made in the editor if it differs.
     const placement = logoPlacement || data.logo_placement
     setLogoPlacement(placement)
     if (placement !== data.logo_placement) await patchGame({ logo_placement: placement })
     setLogoBusy(false)
+    return true
   }
 
   const handleLogoPlacement = async (p) => {
@@ -311,15 +317,6 @@ function SettingsForm({ initial, user, nav }) {
   const handleLogoShape = async (s) => {
     setLogoShape(s)
     if (instant) await patchGame({ logo_shape: s })
-  }
-
-  const scaleCommitRef = useRef(null)
-  const handleLogoScale = (v) => {
-    const next = Math.max(0.4, Math.min(1.6, Math.round(v * 100) / 100))
-    setLogoScale(next)
-    if (!instant) return
-    if (scaleCommitRef.current) clearTimeout(scaleCommitRef.current)
-    scaleCommitRef.current = setTimeout(() => { patchGame({ logo_scale: next }) }, 250)
   }
 
   const handleLogoClear = async () => {
@@ -368,7 +365,6 @@ function SettingsForm({ initial, user, nav }) {
         const { error: lErr } = await api.updateGame(gameId, {
           logo_placement: logoPlacement || 'center',
           logo_shape: logoShape,
-          logo_scale: logoScale,
         })
         if (lErr) throw lErr
       }
@@ -420,7 +416,7 @@ function SettingsForm({ initial, user, nav }) {
       className="fixed inset-0 bg-cream bg-grid flex flex-col"
     >
       {/* Top bar */}
-      <header className="shrink-0 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between gap-3 bg-cream/80 backdrop-blur border-b-2 border-ink z-20">
+      <header className="shrink-0 px-safe [--px:1rem] md:[--px:2rem] py-3 md:py-4 flex items-center justify-between gap-3 bg-cream/80 backdrop-blur border-b-2 border-ink z-20">
         <button
           onClick={close}
           className="btn-chunk bg-white text-sm py-2 p-2 md:px-3"
@@ -474,7 +470,7 @@ function SettingsForm({ initial, user, nav }) {
       </nav>
 
       {/* Content */}
-      <main className="flex-1 overflow-y-auto no-scrollbar">
+      <main className="flex-1 overflow-y-auto no-scrollbar pb-home">
         <div className="max-w-2xl mx-auto px-4 md:px-8 py-6 md:py-8">
           {tab === 'general' && (
             <div>
@@ -502,7 +498,6 @@ function SettingsForm({ initial, user, nav }) {
                     onFile={handleLogoFile}
                     onPlacement={handleLogoPlacement}
                     onShape={handleLogoShape}
-                    onScale={handleLogoScale}
                     onClear={handleLogoClear}
                   />
                 </div>
@@ -723,48 +718,117 @@ function Toggle({ on, onClick }) {
   )
 }
 
-function LogoSection({ logoPath, placement, shape, scale, pendingPreview, removeLogo, busy, onFile, onPlacement, onShape, onScale, onClear }) {
+const LOGO_TYPES = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/avif'
+const MAX_SOURCE_BYTES = 20 * 1024 * 1024  // before cropping; the crop is re-encoded small
+const MAX_RAW_BYTES = 2 * 1024 * 1024      // "skip cropping" uploads the file as-is
+
+function LogoSection({ logoPath, placement, shape, scale, pendingPreview, removeLogo, busy, onFile, onPlacement, onShape, onClear }) {
   const fileRef = useRef(null)
   const [localErr, setLocalErr] = useState(null)
+  const [dragOver, setDragOver] = useState(false)
+  // The image being cropped: { url, file?, vector } — `file` is the original
+  // pick, kept so "Adjust crop" re-crops from full quality, not from the
+  // already-cropped upload.
+  const [source, setSource] = useState(null)
+  const [cropping, setCropping] = useState(false)
   const currentUrl = pendingPreview || (!removeLogo && logoPath ? logoUrl(logoPath) : null)
   const hasLogo = !!currentUrl
 
-  const pick = (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
+  useEffect(() => () => { if (source?.file) URL.revokeObjectURL(source.url) }, [source])
+
+  const accept = (file) => {
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setLocalErr('That doesn\'t look like an image.'); return
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setLocalErr('Logo must be under 2MB.'); return
+    if (file.size > MAX_SOURCE_BYTES) {
+      setLocalErr('That image is over 20MB — try a smaller one.'); return
     }
     setLocalErr(null)
-    onFile(file)
+    setSource({ url: URL.createObjectURL(file), file, vector: file.type === 'image/svg+xml' })
+    setCropping(true)
+  }
+
+  const pick = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    accept(file)
+  }
+
+  const onDrop = (e) => {
+    e.preventDefault()
+    setDragOver(false)
+    accept(e.dataTransfer.files?.[0])
+  }
+
+  const adjust = () => {
+    if (!source) {
+      setSource({ url: currentUrl, file: null, vector: /\.svg($|\?)/i.test(currentUrl) })
+    }
+    setCropping(true)
+  }
+
+  const finish = (ok) => {
+    if (!ok) throw new Error('Upload failed — please try again.')
+    setCropping(false)
+    // Re-cropping an already-uploaded logo: that file is replaced now, so the
+    // next "Crop" should start from the new upload.
+    if (!source?.file) setSource(null)
+  }
+
+  const applyCrop = async (blob) => {
+    const ext = blob.type === 'image/png' ? 'png' : 'webp'
+    finish(await onFile(new File([blob], `logo.${ext}`, { type: blob.type })))
+  }
+
+  const skipCrop = async () => {
+    try { finish(await onFile(source.file)) } catch { /* error shown on the page */ }
+  }
+
+  const clear = () => {
+    setSource(null)
+    onClear()
   }
 
   return (
     <div>
       <label className="block text-sm font-semibold mb-1">Logo</label>
-      <p className="text-xs text-ink/60 mb-2">PNG, JPG, or SVG. Under 2MB.</p>
+      <p className="text-xs text-ink/60 mb-2">PNG, JPG, WebP or SVG — you'll crop it right after picking.</p>
 
-      <div className="flex items-center gap-3 p-3 rounded-2xl border-2 border-ink bg-cream">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={`flex items-center gap-3 p-3 rounded-2xl border-2 transition ${
+          dragOver ? 'border-dashed border-ink bg-candy-yellow/40' : 'border-ink bg-cream'
+        }`}
+      >
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="w-20 h-20 rounded-xl border-2 border-ink bg-white grid place-items-center overflow-hidden shrink-0 hover:bg-candy-yellow transition"
-          aria-label={hasLogo ? 'Change logo' : 'Upload logo'}
+          className={`relative w-20 h-20 ${shape === 'square' || placement === 'top' ? 'rounded-xl' : 'rounded-full'} border-2 border-ink ${hasLogo ? 'bg-checker' : 'bg-white'} grid place-items-center overflow-hidden shrink-0 hover:shadow-chunk-sm hover:-translate-y-0.5 transition group`}
+          aria-label={hasLogo ? 'Choose a different logo' : 'Upload logo'}
         >
           {hasLogo ? (
-            <img src={currentUrl} alt="Logo preview" className="w-full h-full object-contain" />
+            <>
+              <img src={currentUrl} alt="Logo preview" className="w-full h-full object-contain" />
+              <span className="absolute inset-0 grid place-items-center bg-ink/55 text-white text-[11px] font-semibold opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition">
+                Replace
+              </span>
+            </>
           ) : (
             <div className="text-center">
-              <div className="font-display text-2xl font-bold leading-none">+</div>
-              <div className="text-[10px] text-ink/60 font-semibold mt-0.5">Upload</div>
+              <svg className="mx-auto" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>
+              <div className="text-[10px] text-ink/60 font-semibold mt-1">Upload</div>
             </div>
           )}
+          {busy && (
+            <span className="absolute inset-0 grid place-items-center bg-white/80">
+              <span className="w-6 h-6 rounded-full border-[3px] border-ink border-t-transparent animate-spin" />
+            </span>
+          )}
         </button>
-        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/avif" className="hidden" onChange={pick} />
+        <input ref={fileRef} type="file" accept={LOGO_TYPES} className="hidden" onChange={pick} />
 
         <div className="flex-1 min-w-0">
           {busy ? (
@@ -774,27 +838,54 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
             </>
           ) : hasLogo ? (
             <>
-              <div className="text-sm font-semibold">{pendingPreview ? 'New logo ready' : 'Logo uploaded'}</div>
-              <p className="text-xs text-ink/60">Click the preview to change it.</p>
+              <div className="text-sm font-semibold">{pendingPreview ? 'New logo ready' : 'Looking good'}</div>
+              <p className="text-xs text-ink/60">Tap the logo to replace it, or drop a new file here.</p>
             </>
           ) : (
             <>
               <div className="text-sm font-semibold">No logo yet</div>
-              <p className="text-xs text-ink/60">Click the box to pick one.</p>
+              <p className="text-xs text-ink/60">Tap the box or drop an image here.</p>
             </>
           )}
         </div>
 
-        {hasLogo && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition shrink-0"
-          >
-            Remove
-          </button>
+        {hasLogo && !busy && (
+          <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={adjust}
+              className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-yellow text-sm font-semibold transition inline-flex items-center gap-1.5"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" /></svg>
+              Crop
+            </button>
+            <button
+              type="button"
+              onClick={clear}
+              className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
+            >
+              Remove
+            </button>
+          </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {cropping && source && (
+          <Suspense key="cropper" fallback={null}>
+            <LogoCropper
+              key={source.url}
+              src={source.url}
+              vector={source.vector}
+              badgeShape={shape}
+              initialAspect={placement === 'top' ? 'wide' : 'square'}
+              onCancel={() => setCropping(false)}
+              onApply={applyCrop}
+              onSkip={source.file && source.file.size <= MAX_RAW_BYTES ? skipCrop : undefined}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence initial={false}>
         {hasLogo && (
@@ -843,61 +934,20 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="mt-3 p-3 rounded-2xl border-2 border-dashed border-ink/20 space-y-3">
-                      {/* Live preview + shape toggle */}
-                      <div className="flex items-center gap-3">
-                        <BadgePreview src={currentUrl} shape={shape} scale={scale} />
-                        <div className="flex-1">
-                          <div className="text-sm font-semibold mb-1.5">Badge shape</div>
-                          <div className="flex gap-2">
-                            <ShapeChip active={shape === 'circle'} onClick={() => onShape('circle')} label="Circle">
-                              <span className="w-5 h-5 rounded-full border-2 border-ink bg-white block" />
-                            </ShapeChip>
-                            <ShapeChip active={shape === 'square'} onClick={() => onShape('square')} label="Rounded">
-                              <span className="w-5 h-5 rounded-md border-2 border-ink bg-white block" />
-                            </ShapeChip>
-                          </div>
+                    <div className="mt-3 p-3 rounded-2xl border-2 border-dashed border-ink/20 flex items-center gap-3">
+                      <BadgePreview src={currentUrl} shape={shape} scale={scale} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold mb-1.5">Badge shape</div>
+                        <div className="flex gap-2 flex-wrap">
+                          <ShapeChip active={shape === 'circle'} onClick={() => onShape('circle')} label="Circle">
+                            <span className="w-5 h-5 rounded-full border-2 border-ink bg-white block" />
+                          </ShapeChip>
+                          <ShapeChip active={shape === 'square'} onClick={() => onShape('square')} label="Rounded">
+                            <span className="w-5 h-5 rounded-md border-2 border-ink bg-white block" />
+                          </ShapeChip>
                         </div>
-                      </div>
-
-                      {/* Scale stepper */}
-                      <div>
-                        <div className="flex items-baseline justify-between mb-1.5">
-                          <div className="text-sm font-semibold">Logo size</div>
-                          <div className="text-xs text-ink/60">{Math.round(scale * 100)}%</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => onScale(scale - 0.05)}
-                            disabled={scale <= 0.4}
-                            className="w-10 h-10 rounded-xl border-2 border-ink bg-white font-display text-xl font-bold hover:bg-candy-yellow transition disabled:opacity-40"
-                            aria-label="Smaller"
-                          >−</button>
-                          <input
-                            type="range"
-                            min={40} max={160} step={5}
-                            value={Math.round(scale * 100)}
-                            onChange={e => onScale(Number(e.target.value) / 100)}
-                            className="flex-1 accent-candy-pink py-2"
-                            aria-label="Logo size"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => onScale(scale + 0.05)}
-                            disabled={scale >= 1.6}
-                            className="w-10 h-10 rounded-xl border-2 border-ink bg-white font-display text-xl font-bold hover:bg-candy-mint transition disabled:opacity-40"
-                            aria-label="Bigger"
-                          >+</button>
-                          <button
-                            type="button"
-                            onClick={() => onScale(0.8)}
-                            className="text-xs font-semibold text-ink/70 hover:text-ink underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink"
-                            title="Reset to 80%"
-                          >Reset</button>
-                        </div>
-                        <p className="text-xs text-ink/60 mt-1.5">
-                          Crank it up to crop out built-in whitespace, or shrink it for a roomier bubble.
+                        <p className="text-xs text-ink/60 mt-2">
+                          Too much empty space, or edges cut off? Use <button type="button" onClick={adjust} className="font-semibold underline decoration-2 underline-offset-2 decoration-ink/30 hover:decoration-ink">Crop</button> to reframe it.
                         </p>
                       </div>
                     </div>

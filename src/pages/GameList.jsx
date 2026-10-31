@@ -4,6 +4,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as api from '../lib/api'
 import { logoUrl } from '../lib/api'
+import { InstallButton } from '../components/InstallApp.jsx'
 import { subscribeToGames } from '../lib/realtime'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
@@ -110,9 +111,9 @@ export default function GameList() {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="min-h-full bg-cream bg-grid"
+      className="min-h-full pb-home bg-cream bg-grid"
     >
-      <header className="px-4 md:px-10 py-4 md:py-6 flex items-center justify-between gap-3 border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
+      <header className="px-safe [--px:1rem] md:[--px:2.5rem] py-4 md:py-6 flex items-center justify-between gap-3 border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <Link
           to="/landing"
           aria-label="About Pointification"
@@ -126,6 +127,7 @@ export default function GameList() {
           </div>
         </Link>
         <div className="flex items-center gap-2 shrink-0">
+          <InstallButton />
           <SupportMenu />
           <NavLink
             to="/account"

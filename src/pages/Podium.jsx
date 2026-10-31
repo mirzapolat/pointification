@@ -155,7 +155,7 @@ export default function Podium() {
       <StageBackground />
 
       <header
-        className="relative z-20 px-4 md:px-8 py-4 flex items-start justify-between gap-3"
+        className="relative z-20 px-safe [--px:1rem] md:[--px:2rem] py-4 flex items-start justify-between gap-3"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-4 md:gap-6 min-w-0">
@@ -216,7 +216,7 @@ export default function Podium() {
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 flex items-end justify-center px-4 md:px-8 pb-24 md:pb-28">
+      <main className="relative z-10 flex-1 flex items-end justify-center px-safe [--px:1rem] md:[--px:2rem] pb-safe [--pb:6rem] md:[--pb:7rem]">
         {!hasTeams ? (
           <div className="m-auto card-chunk p-10 text-center">
             <div className="text-5xl mb-2">🎈</div>

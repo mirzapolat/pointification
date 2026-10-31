@@ -195,7 +195,9 @@ router.put('/:id/logo', loadGame, requireOwner, wrap(async (req, res) => {
 
   const previous = req.game.logo_path
   const placement = req.game.logo_placement ?? 'center'
-  run('UPDATE games SET logo_path = ?, logo_placement = ?, updated_at = ? WHERE id = ?',
+  // Logos are cropped in the browser before upload, so a new one always fills
+  // its badge; logo_scale only lingers for logos uploaded before cropping.
+  run('UPDATE games SET logo_path = ?, logo_placement = ?, logo_scale = 1, updated_at = ? WHERE id = ?',
     relPath, placement, nowIso(), req.game.id)
   if (previous && previous !== relPath) deleteLogo(previous)
   emitGame(req.game.id, 'UPDATE')

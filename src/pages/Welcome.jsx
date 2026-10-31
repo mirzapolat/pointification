@@ -66,7 +66,7 @@ export default function Welcome() {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="min-h-full bg-cream bg-dots relative overflow-hidden flex flex-col items-center justify-center px-4 py-10"
+      className="min-h-full bg-cream bg-dots relative overflow-hidden flex flex-col items-center justify-center px-4 pt-10 pb-safe [--pb:2.5rem]"
     >
       <Blobs />
 

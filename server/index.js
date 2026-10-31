@@ -175,7 +175,22 @@ app.get(Object.keys(PUBLIC_PAGES), async (req, res, next) => {
 
 // Build artifacts are implementation details, not alternative indexable URLs.
 app.use('/prerender', (_req, res) => res.status(404).end())
-app.use(express.static(DIST_DIR, { index: false, maxAge: '1h' }))
+app.use(express.static(DIST_DIR, {
+  index: false,
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    const name = path.basename(filePath)
+    // The service worker and manifest must be re-checked on every visit, or
+    // installed apps keep running an old worker for the whole max-age.
+    if (name === 'sw.js' || name === 'manifest.webmanifest') {
+      res.setHeader('cache-control', 'no-cache')
+    } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      // Vite assets are content-hashed, so they never change in place.
+      res.setHeader('cache-control', 'public, max-age=31536000, immutable')
+    }
+    if (name === 'manifest.webmanifest') res.setHeader('content-type', 'application/manifest+json')
+  },
+}))
 
 // --- App routes and real 404 responses ------------------------------------
 const appRoute = /^\/(?:login|verify|welcome|onboarding|account|game\/[^/]+(?:\/(?:settings|log|podium))?)\/?$/

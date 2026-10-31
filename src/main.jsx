@@ -4,9 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { AuthProvider } from './lib/auth.jsx'
 import { initAnalytics } from './lib/analytics.js'
+import { registerPwa } from './lib/pwa.js'
 import './styles.css'
 
 initAnalytics()
+registerPwa()
 
 const app = (
   <React.StrictMode>
