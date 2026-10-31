@@ -172,7 +172,6 @@ export default function Podium() {
           </button>
           <div className="hidden md:flex min-w-0 items-baseline gap-2 md:gap-3">
             <h1 className="font-display font-bold text-xl md:text-2xl truncate leading-none">{game.name}</h1>
-            <div className="text-xs md:text-sm text-ink/60 shrink-0">Podium</div>
           </div>
         </div>
 
@@ -221,7 +220,6 @@ export default function Podium() {
           <div className="m-auto card-chunk p-10 text-center">
             <div className="text-5xl mb-2">🎈</div>
             <h2 className="font-display font-bold text-2xl">No teams to crown</h2>
-            <p className="text-ink/60 mt-1">Add some teams and play a round first.</p>
           </div>
         ) : (
           <div className="flex items-end justify-center gap-2 md:gap-4 w-full max-w-6xl">

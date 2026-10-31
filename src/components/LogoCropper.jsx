@@ -113,7 +113,6 @@ export default function LogoCropper({
         <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b-2 border-ink">
           <div className="min-w-0">
             <h2 id="crop-title" className="font-display text-xl font-bold leading-tight">Crop your logo</h2>
-            <p className="text-xs text-ink/60 truncate">Drag to move · pinch or scroll to zoom</p>
           </div>
           <button
             type="button"
@@ -217,9 +216,6 @@ export default function LogoCropper({
               title="Show the whole image"
             >Fit</button>
           </div>
-          <p className="text-xs text-ink/60 -mt-2">
-            Zoom out past <b>Fit</b> to give the logo breathing room — the extra space stays transparent.
-          </p>
 
           {error && (
             <div className="px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{error}</div>

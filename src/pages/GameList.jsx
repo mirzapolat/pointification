@@ -396,12 +396,10 @@ function EmptyForFilter({ filter }) {
     shared: {
       emoji: '🤝',
       title: 'No shared games yet',
-      body: 'When someone invites you to a game, it shows up here.',
     },
     archive: {
       emoji: '📦',
       title: 'Nothing archived',
-      body: 'Archive a game from its menu and it lands here, safe and out of the way.',
     },
   }
   const s = map[filter] ?? map.shared
@@ -412,7 +410,6 @@ function EmptyForFilter({ filter }) {
     >
       <div className="text-5xl md:text-6xl mb-3">{s.emoji}</div>
       <h3 className="font-display text-2xl md:text-3xl font-bold">{s.title}</h3>
-      <p className="text-ink/60 mt-2 max-w-sm mx-auto">{s.body}</p>
     </motion.div>
   )
 }
@@ -422,6 +419,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
   const teams = game.teams ?? []
   const isArchived = !!game.archived_at
   const logo = game.logo_path ? logoUrl(game.logo_path) : null
+  const logoPct = Math.max(40, Math.min(160, Math.round((game.logo_scale ?? 1) * 100)))
   const [menu, setMenu] = useState(null) // { type: 'show'|'remove', x, y } | null
   const openMenu = (type, e) => {
     e.preventDefault()
@@ -453,6 +451,19 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
                 shared
               </span>
             )}
+            {isOwner && game.member_count > 0 && (
+              <span
+                title={`Shared with ${game.member_count} ${game.member_count === 1 ? 'person' : 'people'}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="9" cy="8" r="3.5" />
+                  <path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5" />
+                  <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.7.8 2.8 2.6 3 5.2" />
+                </svg>
+                {game.member_count}
+              </span>
+            )}
             {isArchived && (
               <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-white text-xs font-bold uppercase tracking-wider">
                 archived
@@ -460,16 +471,23 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
             )}
           </div>
           {logo && (
-            <div className="absolute top-2 left-2 w-16 h-16 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm grid place-items-center overflow-hidden -rotate-3">
-              <img src={logo} alt="" className="w-[78%] h-[78%] object-contain" />
+            <div
+              className={`absolute top-2 left-2 w-16 h-16 ${
+                game.logo_placement === 'center' && game.logo_shape !== 'square' ? 'rounded-full' : 'rounded-2xl'
+              } border-2 border-ink bg-white shadow-chunk-sm grid place-items-center overflow-hidden -rotate-3`}
+            >
+              {/* Same sizing as the in-game badge: cropped logos (scale 1) fill edge to edge. */}
+              <img
+                src={logo}
+                alt=""
+                className="object-contain"
+                style={{ width: `${logoPct}%`, height: `${logoPct}%` }}
+              />
             </div>
           )}
         </div>
         <div className="p-5 flex-1">
           <h3 className="font-display text-2xl font-bold leading-tight truncate">{game.name}</h3>
-          <p className="text-ink/60 text-sm mt-1">
-            {teams.length} {teams.length === 1 ? 'team' : 'teams'}
-          </p>
           <div className="flex flex-wrap gap-1.5 mt-3 min-h-[28px]">
             {teams.slice(0, 6).map(t => (
               <span
@@ -619,7 +637,6 @@ const NewGameCard = forwardRef(function NewGameCard({ i, onCreate }, ref) {
     >
       <div className="w-14 h-14 rounded-2xl bg-white border-2 border-ink grid place-items-center font-display text-3xl font-bold mb-3">+</div>
       <h3 className="font-display text-2xl font-bold leading-tight">New game</h3>
-      <p className="text-ink/60 text-sm mt-1">Start tracking points</p>
     </motion.button>
   )
 })
@@ -633,8 +650,7 @@ function EmptyState({ filter, onCreate }) {
     >
       <div className="text-6xl mb-3">🎲</div>
       <h3 className="font-display text-3xl font-bold">{title}</h3>
-      <p className="text-ink/60 mt-2 mb-6">Create your first game and start racking up points.</p>
-      <button onClick={onCreate} className="btn-chunk bg-candy-pink text-white text-lg">+ New game</button>
+      <button onClick={onCreate} className="mt-6 btn-chunk bg-candy-pink text-white text-lg">+ New game</button>
     </motion.div>
   )
 }

@@ -75,7 +75,14 @@ router.get('/', wrap(async (req, res) => {
     )) {
       teamsByGame.get(t.game_id)?.push(serializeTeam(t))
     }
-    for (const g of games) g.teams = teamsByGame.get(g.id) ?? []
+    const memberCounts = new Map(all(
+      `SELECT game_id, COUNT(*) AS n FROM game_members WHERE game_id IN (${placeholders}) GROUP BY game_id`,
+      ...games.map(g => g.id)
+    ).map(r => [r.game_id, r.n]))
+    for (const g of games) {
+      g.teams = teamsByGame.get(g.id) ?? []
+      g.member_count = memberCounts.get(g.id) ?? 0
+    }
   }
   res.json({ games })
 }))

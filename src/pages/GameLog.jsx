@@ -94,7 +94,6 @@ export default function GameLog() {
         </button>
         <div className="min-w-0 text-center flex-1">
           <h1 className="font-display font-bold text-lg md:text-2xl truncate leading-none">{game.name}</h1>
-          <div className="text-xs md:text-sm text-ink/60 mt-0.5">Details</div>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -150,7 +149,6 @@ export default function GameLog() {
           <div className="lg:col-span-3 card-chunk p-4 md:p-6 flex flex-col">
             <div className="flex items-center justify-between mb-3 md:mb-4">
               <h2 className="font-display font-bold text-xl md:text-2xl">Score over time</h2>
-              <div className="text-xs text-ink/50 hidden sm:block">Hover or tap to inspect</div>
             </div>
             <ScoreGraph boundaries={boundaries} series={series} hasData={filteredLogs.length > 0} />
           </div>
@@ -342,7 +340,6 @@ function ActivityLog({ logs, teamMap }) {
       <div className="p-8 text-center">
         <div className="text-4xl mb-2">📜</div>
         <h3 className="font-display text-lg font-bold">Nothing in this window</h3>
-        <p className="text-ink/60 text-sm mt-1">Try a longer range.</p>
       </div>
     )
   }

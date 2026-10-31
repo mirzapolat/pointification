@@ -18,9 +18,9 @@ const DEFAULT_PRESETS = [5, 10, 15, -5, -10, -15]
 const MAX_PRESETS = 24
 const SORT_MODES = ['manual', 'desc', 'asc']
 const SORT_OPTIONS = [
-  { id: 'manual', label: 'Manual', hint: 'Drag handles set order' },
-  { id: 'desc', label: 'Points ↓', hint: 'Highest score on top' },
-  { id: 'asc', label: 'Points ↑', hint: 'Lowest score on top' },
+  { id: 'manual', label: 'Manual' },
+  { id: 'desc', label: 'Points ↓' },
+  { id: 'asc', label: 'Points ↑' },
 ]
 
 // Route wrapper: loads the game for edit mode, then renders the tabbed form.
@@ -432,9 +432,6 @@ function SettingsForm({ initial, user, nav }) {
           <h1 className="font-display font-bold text-lg md:text-2xl truncate leading-none">
             {isEdit ? (name || 'Settings') : 'New game'}
           </h1>
-          <div className="text-xs md:text-sm text-ink/60 mt-0.5">
-            Settings{isEdit && !isOwner ? ' · shared' : ''}
-          </div>
         </div>
         {isEdit ? (
           <button onClick={close} className="btn-chunk bg-candy-mint text-sm py-2 px-3 md:px-4">
@@ -510,9 +507,6 @@ function SettingsForm({ initial, user, nav }) {
               <div className="mb-6 p-3 rounded-2xl border-2 border-dashed border-ink/20">
                 <div className="flex items-baseline justify-between gap-3 mb-2">
                   <label className="block text-sm font-semibold">Team order</label>
-                  <span className="text-xs text-ink/60 truncate">
-                    {SORT_OPTIONS.find(o => o.id === teamSort)?.hint}
-                  </span>
                 </div>
                 <div
                   role="radiogroup"
@@ -599,7 +593,6 @@ function SettingsForm({ initial, user, nav }) {
               <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
                 <div>
                   <label className="block text-sm font-semibold">Allow negative scores</label>
-                  <p className="text-xs text-ink/60">When off, scores can't go below zero.</p>
                 </div>
                 <Toggle on={allowNegative} onClick={toggleNegative} />
               </div>
@@ -613,7 +606,6 @@ function SettingsForm({ initial, user, nav }) {
               <div className="mb-6 flex items-center justify-between gap-4 p-3 rounded-2xl border-2 border-dashed border-ink/20">
                 <div>
                   <label className="block text-sm font-semibold">Enable rounds</label>
-                  <p className="text-xs text-ink/60">Track how teams perform over time. Each point change is tagged to the active round.</p>
                 </div>
                 <Toggle on={roundsEnabled} onClick={toggleRounds} />
               </div>
@@ -673,9 +665,6 @@ function SettingsForm({ initial, user, nav }) {
                       <span className="text-lg leading-none">+</span> Add round
                     </motion.button>
                   </div>
-                  <p className="text-xs text-ink/60 mt-3">
-                    You can also add the next round on the fly from the game screen.
-                  </p>
                 </>
               )}
             </div>
@@ -792,8 +781,7 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
 
   return (
     <div>
-      <label className="block text-sm font-semibold mb-1">Logo</label>
-      <p className="text-xs text-ink/60 mb-2">PNG, JPG, WebP or SVG — you'll crop it right after picking.</p>
+      <label className="block text-sm font-semibold mb-2">Logo</label>
 
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -834,17 +822,14 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
           {busy ? (
             <>
               <div className="text-sm font-semibold">Uploading…</div>
-              <p className="text-xs text-ink/60">Hang tight for a sec.</p>
             </>
           ) : hasLogo ? (
             <>
               <div className="text-sm font-semibold">{pendingPreview ? 'New logo ready' : 'Looking good'}</div>
-              <p className="text-xs text-ink/60">Tap the logo to replace it, or drop a new file here.</p>
             </>
           ) : (
             <>
               <div className="text-sm font-semibold">No logo yet</div>
-              <p className="text-xs text-ink/60">Tap the box or drop an image here.</p>
             </>
           )}
         </div>
@@ -903,27 +888,21 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
                   active={placement === 'center'}
                   onClick={() => onPlacement('center')}
                   label="Center"
-                  hint="Bubble badge"
                   preview={<CenterPreview />}
                 />
                 <PlacementOption
                   active={placement === 'top'}
                   onClick={() => onPlacement('top')}
                   label="Top row"
-                  hint="Full width"
                   preview={<TopPreview />}
                 />
                 <PlacementOption
                   active={placement === 'menu'}
                   onClick={() => onPlacement('menu')}
                   label="Menu only"
-                  hint="Game list"
                   preview={<MenuPreview />}
                 />
               </div>
-              <p className="text-xs text-ink/60 mt-2">
-                The logo always appears on the game card in your list — these options control the game screen and public link.
-              </p>
 
               <AnimatePresence initial={false}>
                 {placement === 'center' && (
@@ -946,9 +925,6 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
                             <span className="w-5 h-5 rounded-md border-2 border-ink bg-white block" />
                           </ShapeChip>
                         </div>
-                        <p className="text-xs text-ink/60 mt-2">
-                          Too much empty space, or edges cut off? Use <button type="button" onClick={adjust} className="font-semibold underline decoration-2 underline-offset-2 decoration-ink/30 hover:decoration-ink">Crop</button> to reframe it.
-                        </p>
                       </div>
                     </div>
                   </motion.div>
@@ -995,7 +971,7 @@ function ShapeChip({ active, onClick, label, children }) {
   )
 }
 
-function PlacementOption({ active, onClick, label, hint, preview }) {
+function PlacementOption({ active, onClick, label, preview }) {
   return (
     <button
       type="button"
@@ -1008,7 +984,6 @@ function PlacementOption({ active, onClick, label, hint, preview }) {
         {preview}
       </div>
       <div className="font-display font-bold text-sm leading-tight">{label}</div>
-      <div className="text-[11px] text-ink/60 leading-tight">{hint}</div>
       {active && (
         <span className="absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-ink bg-ink text-cream grid place-items-center text-[10px] font-bold">✓</span>
       )}
@@ -1103,7 +1078,6 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
       <div className="flex items-center justify-between mb-3">
         <div>
           <label className="block text-sm font-semibold">Public link</label>
-          <p className="text-xs text-ink/60">Anyone with the link can watch live. They can't change anything.</p>
         </div>
         <button
           type="button"
@@ -1247,9 +1221,9 @@ function QRPreview({ url }) {
         title="QR code options"
       >
         <QRCodeSVG value={url} size={132} bgColor="#ffffff" fgColor="#0F0F12" level="M" marginSize={0} />
-        <p className="mt-1.5 text-center text-[11px] font-semibold text-ink/60">
-          {copied ? 'Copied!' : 'Tap for options'}
-        </p>
+        {copied && (
+          <p className="mt-1.5 text-center text-[11px] font-semibold text-ink/60">Copied!</p>
+        )}
       </button>
 
       {/* Hi-res canvas kept offscreen for crisp PNG export */}
@@ -1346,7 +1320,7 @@ function MembersSection({ gameId }) {
     const { error } = await api.inviteMember(gameId, email.trim())
     setBusy(false)
     if (error) setErr(error.message)
-    else { track('invite-sent'); setMsg(`Invited ${email}.`); setEmail('') }
+    else { track('invite-sent'); setMsg(`${email} can now see and edit this game.`); setEmail('') }
   }
 
   const dialogs = useDialogs()
@@ -1364,8 +1338,7 @@ function MembersSection({ gameId }) {
 
   return (
     <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
-      <label className="block text-sm font-semibold">People you've invited</label>
-      <p className="text-xs text-ink/60 mb-2">They can see and edit this game. Remove them any time.</p>
+      <label className="block text-sm font-semibold mb-2">People you've invited</label>
 
       <div className="space-y-2 mb-3">
         {members.length === 0 ? (
@@ -1375,8 +1348,11 @@ function MembersSection({ gameId }) {
         ) : (
           <AnimatePresence initial={false}>
             {members.map(m => {
-              const name = m.profiles?.display_name?.trim()
-              const email = m.profiles?.email
+              const name = m.display_name?.trim()
+              const email = m.email
+              const since = m.created_at
+                ? new Date(m.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+                : null
               const primary = name || email || '…'
               const initial = (name || email || '?')[0]?.toUpperCase()
               return (
@@ -1391,9 +1367,11 @@ function MembersSection({ gameId }) {
                   </div>
                   <div className="flex-1 truncate">
                     <div className="font-semibold truncate">{primary}</div>
-                    {name && email && (
-                      <div className="text-xs text-ink/60 truncate">{email}</div>
-                    )}
+                    <div className="text-xs text-ink/60 truncate">
+                      {name && email ? `${email} · ` : ''}
+                      <span className="text-emerald-700 font-semibold">Has access</span>
+                      {since ? ` since ${since}` : ''}
+                    </div>
                   </div>
                   <button
                     onClick={() => remove(m.user_id, primary)}
@@ -1623,9 +1601,6 @@ function PresetsSection({ presets, onChange }) {
           </button>
         )}
       </div>
-      <p className="text-xs text-ink/60 mb-3">
-        Shown in the popup when you tap a team, top to bottom. Type any whole number — use a minus sign for penalties. Drag the handle (or use the arrows) to reorder.
-      </p>
 
       <div className="space-y-2">
         <AnimatePresence initial={false}>
@@ -1673,11 +1648,6 @@ function PresetsSection({ presets, onChange }) {
         </motion.button>
       </div>
 
-      {items.length === 0 && (
-        <p className="text-xs text-ink/60 mt-3">
-          No quick buttons — players will still see the custom amount field in the popup.
-        </p>
-      )}
       {full && (
         <p className="text-xs text-ink/60 mt-3">Maximum of {MAX_PRESETS} presets reached.</p>
       )}

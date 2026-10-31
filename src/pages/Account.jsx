@@ -167,7 +167,6 @@ function PrivacyCard() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <label className="block text-sm font-semibold">Allow others to add me to games</label>
-          <p className="text-xs text-ink/60">When off, no one can invite you as a collaborator.</p>
         </div>
         <button
           type="button"
@@ -388,7 +387,6 @@ function TwoFactorCard() {
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-candy-mint border-2 border-ink" />
                 <span className="font-semibold">2FA is on</span>
               </div>
-              <p className="text-xs text-ink/60 mt-1">You'll be asked for a code every time you sign in.</p>
             </div>
             <button
               onClick={() => { setDisabling(true); setCode(''); setErr(null); setMsg(null) }}
@@ -401,13 +399,10 @@ function TwoFactorCard() {
         </div>
       ) : (
         <div>
-          <p className="text-sm text-ink/80">
-            Add a second step at sign-in. Use any authenticator app to generate a 6-digit code from your phone.
-          </p>
           <button
             onClick={startEnroll}
             disabled={busy}
-            className="btn-chunk bg-candy-mint mt-4 disabled:opacity-60"
+            className="btn-chunk bg-candy-mint disabled:opacity-60"
           >
             {busy ? 'Preparing…' : 'Enable 2FA'}
           </button>

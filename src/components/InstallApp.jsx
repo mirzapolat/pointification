@@ -80,7 +80,6 @@ function IosInstallSheet({ open, onClose }) {
               <img src="/icons/icon-192.png" alt="" className="w-12 h-12" />
               <div>
                 <h2 id="ios-install-title" className="font-display text-xl font-bold leading-tight">Add to Home Screen</h2>
-                <p className="text-xs text-ink/60">Opens full screen, like a real app.</p>
               </div>
             </div>
             <ol className="space-y-3 text-sm">
@@ -129,7 +128,6 @@ export function UpdateToast() {
             <span className="text-xl" aria-hidden="true">✨</span>
             <div className="flex-1 min-w-0">
               <div className="font-display font-bold text-sm">New version ready</div>
-              <div className="text-xs text-ink/60">Reload to get the latest Pointification.</div>
             </div>
             <button type="button" onClick={dismissUpdate} className="text-xs font-semibold text-ink/60 hover:text-ink px-2">Later</button>
             <button type="button" onClick={applyUpdate} className="btn-chunk bg-candy-mint text-sm px-3 py-2">Reload</button>
