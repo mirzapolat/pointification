@@ -40,10 +40,10 @@ export function InstallButton({ className = '' }) {
         onClick={onClick}
         aria-label="Install app"
         title="Install app"
-        className={`btn-chunk bg-candy-yellow text-sm p-2 md:px-4 md:py-2 inline-flex items-center gap-2 ${className}`}
+        className={`btn-chunk bg-candy-yellow text-sm px-3 py-2 md:px-4 inline-flex items-center gap-1.5 md:gap-2 ${className}`}
       >
         <InstallIcon />
-        <span className="hidden md:inline">Install</span>
+        <span>Install</span>
       </button>
       <IosInstallSheet open={help} onClose={() => setHelp(false)} />
     </>

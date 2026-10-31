@@ -9,6 +9,17 @@ import { useDialogs } from '../components/Dialogs.jsx'
 export default function Account() {
   const { user, signOut } = useAuth()
   const nav = useNavigate()
+  const dialogs = useDialogs()
+
+  const handleSignOut = async () => {
+    const ok = await dialogs.confirm({
+      title: 'Sign out?',
+      message: 'You can sign back in any time.',
+      confirmLabel: 'Sign out',
+      tone: 'neutral',
+    })
+    if (ok) await signOut()
+  }
 
   return (
     <motion.div
@@ -18,7 +29,13 @@ export default function Account() {
       <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
         <Link to="/" className="btn-chunk bg-white text-sm py-2 px-3">← Games</Link>
         <h1 className="font-display font-bold text-2xl">Account</h1>
-        <div className="w-[88px]" />
+        <button
+          onClick={handleSignOut}
+          className="btn-chunk bg-white text-sm py-2 px-3 inline-flex items-center gap-2"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 md:px-10 py-10 space-y-6">

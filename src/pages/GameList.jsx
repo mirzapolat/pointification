@@ -19,7 +19,7 @@ const FILTERS = [
 ]
 
 export default function GameList() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const dialogs = useDialogs()
   const nav = useNavigate()
   const [games, setGames] = useState([])
@@ -36,16 +36,6 @@ export default function GameList() {
 
   // Any change to a game the user can see reshuffles this list, so reload wholesale.
   useEffect(() => subscribeToGames({ '*': load }), [])
-
-  const handleSignOut = async () => {
-    const ok = await dialogs.confirm({
-      title: 'Sign out?',
-      message: 'You can sign back in any time.',
-      confirmLabel: 'Sign out',
-      tone: 'neutral',
-    })
-    if (ok) await signOut()
-  }
 
   const archive = async (game) => {
     const archived = !!game.archived_at
@@ -138,15 +128,6 @@ export default function GameList() {
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
             <span className="hidden md:inline">Account</span>
           </NavLink>
-          <button
-            onClick={handleSignOut}
-            aria-label="Sign out"
-            title="Sign out"
-            className="btn-chunk bg-white text-sm p-2 md:px-4 md:py-2 inline-flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            <span className="hidden md:inline">Sign out</span>
-          </button>
         </div>
       </header>
 

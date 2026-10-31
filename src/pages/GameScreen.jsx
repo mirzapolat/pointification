@@ -456,12 +456,14 @@ export function LogoCenterBadge({ src, shape = 'circle', scale = 0.8 }) {
   const pct = Math.max(40, Math.min(160, Math.round(scale * 100)))
   const radius = shape === 'square' ? 'rounded-3xl' : 'rounded-full'
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+    // The last row carries the home-bar inset as bottom padding, so centre the
+    // badge over the rows' content area, not the full board height.
+    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[env(safe-area-inset-bottom,0px)] z-20 grid place-items-center">
       <motion.div
         initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}
         transition={{ type: 'spring', stiffness: 180, damping: 16 }}
-        className={`${radius} border-2 border-ink bg-white shadow-chunk grid place-items-center overflow-hidden w-40 h-40 sm:w-52 sm:h-52 md:w-64 md:h-64 lg:w-72 lg:h-72`}
+        className={`${radius} border-2 border-ink bg-white shadow-chunk grid place-items-center overflow-hidden w-28 h-28 sm:w-44 sm:h-44 md:w-64 md:h-64 lg:w-72 lg:h-72`}
       >
         <img
           src={src}
