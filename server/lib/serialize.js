@@ -15,6 +15,7 @@ export function serializeGame(row) {
     public_token: row.public_token ?? null,
     allow_negative: bool(row.allow_negative),
     archived_at: row.archived_at ?? null,
+    deleted_at: row.deleted_at ?? null,
     logo_path: row.logo_path ?? null,
     logo_placement: row.logo_placement ?? null,
     logo_shape: row.logo_shape,

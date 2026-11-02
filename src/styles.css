@@ -97,6 +97,9 @@ body {
   .pb-safe {
     padding-bottom: max(var(--pb, 1.25rem), calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
   }
+  .pt-safe {
+    padding-top: max(var(--pt, 1.25rem), calc(env(safe-area-inset-top, 0px) + 0.75rem));
+  }
   .bottom-safe {
     bottom: max(var(--b, 1.25rem), calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
   }

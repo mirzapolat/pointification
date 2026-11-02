@@ -11,7 +11,7 @@
 //   icons, fonts, /logos/*  stale-while-revalidate
 //   /api/*, non-GET         untouched
 
-const VERSION = 'v1'
+const VERSION = 'v2'
 const SHELL_CACHE = `pf-shell-${VERSION}`
 const PAGE_CACHE = `pf-pages-${VERSION}`
 const ASSET_CACHE = `pf-assets-${VERSION}`

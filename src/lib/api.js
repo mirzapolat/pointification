@@ -115,7 +115,10 @@ export const createGame = (name) =>
 export const updateGame = (id, patch) =>
   pick(request(`/games/${id}`, { method: 'PATCH', body: patch }), 'game')
 
-export const deleteGame = (id) => request(`/games/${id}`, { method: 'DELETE' })
+/** Moves the game to the trash; see restoreGame / deleteGameForever. */
+export const deleteGame = (id) => pick(request(`/games/${id}`, { method: 'DELETE' }), 'game')
+export const restoreGame = (id) => pick(request(`/games/${id}/restore`, { method: 'POST' }), 'game')
+export const deleteGameForever = (id) => request(`/games/${id}/permanent`, { method: 'DELETE' })
 
 export const setGameSharing = (id, enabled) =>
   pick(request(`/games/${id}/sharing`, { method: 'POST', body: { enabled } }), 'game')

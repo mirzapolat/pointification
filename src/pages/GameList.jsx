@@ -16,7 +16,16 @@ const FILTERS = [
   { id: 'mine',     label: 'My games',        icon: CrownIcon,    accent: '#5EE2C1' },
   { id: 'shared',   label: 'Shared with me',  icon: PeopleIcon,   accent: '#4D7CFF' },
   { id: 'archive',  label: 'Archive',         icon: ArchiveIcon,  accent: '#9B6DFF' },
+  { id: 'trash',    label: 'Trash',           icon: TrashIcon,    accent: '#FF4FA3' },
 ]
+
+// Matches TRASH_DAYS on the server (server/routes/games.js).
+const TRASH_DAYS = 30
+
+const daysLeftInTrash = (deletedAt) => {
+  const ms = new Date(deletedAt).getTime() + TRASH_DAYS * 86400_000 - Date.now()
+  return Math.max(0, Math.ceil(ms / 86400_000))
+}
 
 export default function GameList() {
   const { user } = useAuth()
@@ -45,17 +54,59 @@ export default function GameList() {
     if (error) await dialogs.alert({ title: archived ? 'Could not unarchive' : 'Could not archive', message: error.message })
   }
 
+  const [toast, setToast] = useState(null) // { id, message, undo? }
+  const toastTimer = useRef(null)
+  const showToast = (message, undo) => {
+    clearTimeout(toastTimer.current)
+    const id = Date.now()
+    setToast({ id, message, undo })
+    toastTimer.current = setTimeout(() => setToast(t => (t?.id === id ? null : t)), 6000)
+  }
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
+
+  const patchLocal = (game) => game && setGames(gs => gs.map(g => (g.id === game.id ? { ...g, ...game } : g)))
+
+  const restore = async (game) => {
+    const { data, error } = await api.restoreGame(game.id)
+    if (error) return dialogs.alert({ title: 'Could not restore', message: error.message })
+    patchLocal(data)
+  }
+
+  // Deleting only moves the game to the trash, so no confirm — just an undo.
   const remove = async (game) => {
+    const { data, error } = await api.deleteGame(game.id)
+    if (error) return dialogs.alert({ title: 'Could not delete', message: error.message })
+    patchLocal(data)
+    showToast(`"${game.name}" moved to the trash.`, () => { setToast(null); restore(game) })
+  }
+
+  const deleteForever = async (game) => {
     const ok = await dialogs.confirm({
-      title: 'Delete game?',
+      title: 'Delete forever?',
       message: `"${game.name}" and all its teams, scores, and logs will be permanently removed. This cannot be undone.`,
-      confirmLabel: 'Delete',
+      confirmLabel: 'Delete forever',
       tone: 'danger',
     })
     if (!ok) return
     // The server removes the game's stored logo along with the row.
-    const { error } = await api.deleteGame(game.id)
-    if (error) await dialogs.alert({ title: 'Could not delete', message: error.message })
+    const { error } = await api.deleteGameForever(game.id)
+    if (error) return dialogs.alert({ title: 'Could not delete', message: error.message })
+    setGames(gs => gs.filter(g => g.id !== game.id))
+  }
+
+  const emptyTrash = async (trashed) => {
+    const ok = await dialogs.confirm({
+      title: 'Empty the trash?',
+      message: `${trashed.length} ${trashed.length === 1 ? 'game' : 'games'} will be permanently removed. This cannot be undone.`,
+      confirmLabel: 'Empty trash',
+      tone: 'danger',
+    })
+    if (!ok) return
+    const results = await Promise.all(trashed.map(g => api.deleteGameForever(g.id)))
+    const gone = new Set(trashed.filter((_, i) => !results[i].error).map(g => g.id))
+    setGames(gs => gs.filter(g => !gone.has(g.id)))
+    const failed = results.find(r => r.error)
+    if (failed) dialogs.alert({ title: 'Some games were not deleted', message: failed.error.message })
   }
 
   const leave = async (game) => {
@@ -71,21 +122,11 @@ export default function GameList() {
     setGames(gs => gs.filter(x => x.id !== game.id))
   }
 
-  const counts = useMemo(() => {
-    const c = { all: 0, mine: 0, shared: 0, archive: 0 }
-    for (const g of games) {
-      const isOwner = g.user_id === user?.id
-      if (g.archived_at) { c.archive += 1; continue }
-      c.all += 1
-      if (isOwner) c.mine += 1
-      else c.shared += 1
-    }
-    return c
-  }, [games, user?.id])
-
   const visible = useMemo(() => {
     return games.filter(g => {
       const isOwner = g.user_id === user?.id
+      if (filter === 'trash') return !!g.deleted_at && isOwner
+      if (g.deleted_at) return false
       switch (filter) {
         case 'mine':    return !g.archived_at && isOwner
         case 'shared':  return !g.archived_at && !isOwner
@@ -103,38 +144,11 @@ export default function GameList() {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full pb-home bg-cream bg-grid"
     >
-      <header className="px-safe [--px:1rem] md:[--px:2.5rem] py-4 md:py-6 flex items-center justify-between gap-3 border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
-        <Link
-          to="/landing"
-          aria-label="About Pointification"
-          title="About Pointification"
-          className="group flex items-center gap-2.5 md:gap-3 min-w-0 rounded-2xl -m-1 p-1 transition hover:-translate-y-0.5"
-        >
-          <img src="/pointification.png" alt="Pointification" className="w-9 h-9 md:w-10 md:h-10 shrink-0 object-contain transition-transform group-hover:rotate-[-6deg]" />
-          <div className="min-w-0 hidden md:block">
-            <h1 className="font-display font-bold text-xl md:text-2xl leading-none">Pointification</h1>
-          </div>
-        </Link>
-        <div className="flex items-center gap-2 shrink-0">
-          <InstallButton />
-          <SupportMenu />
-          <NavLink
-            to="/account"
-            aria-label="Account"
-            title="Account"
-            className="btn-chunk bg-white text-sm p-2 md:px-4 md:py-2 inline-flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-            <span className="hidden md:inline">Account</span>
-          </NavLink>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10 flex flex-col md:flex-row gap-6 md:gap-8">
+      <div className="max-w-7xl mx-auto px-safe [--px:1rem] md:[--px:2.5rem] pt-safe [--pt:1.25rem] md:[--pt:2.5rem] pb-10 flex flex-col md:flex-row gap-5 md:gap-8">
         <Sidebar
           filter={filter}
           onChange={setFilter}
-          counts={counts}
+          user={user}
         />
 
         <main className="flex-1 min-w-0">
@@ -142,7 +156,23 @@ export default function GameList() {
             <SkeletonGrid />
           ) : (
             <>
-              <FilterHeader filter={filter} count={visible.length} />
+              <FilterHeader
+                filter={filter}
+                count={visible.length}
+                action={filter === 'trash' && visible.length > 0 && (
+                  <button
+                    onClick={() => emptyTrash(visible)}
+                    className="btn-chunk bg-white text-sm py-1.5 px-3 hover:bg-candy-pink hover:text-white"
+                  >
+                    Empty trash
+                  </button>
+                )}
+              />
+              {filter === 'trash' && visible.length > 0 && (
+                <p className="-mt-2 mb-4 text-sm text-ink/60">
+                  Games in the trash are deleted for good after {TRASH_DAYS} days.
+                </p>
+              )}
 
               {visible.length === 0 && !allowCreate ? (
                 <EmptyForFilter filter={filter} />
@@ -162,6 +192,8 @@ export default function GameList() {
                           onEdit={() => nav(`/game/${g.id}/settings`)}
                           onArchive={isOwner ? () => archive(g) : null}
                           onDelete={() => isOwner ? remove(g) : leave(g)}
+                          onRestore={() => restore(g)}
+                          onDeleteForever={() => deleteForever(g)}
                         />
                       )
                     })}
@@ -175,14 +207,118 @@ export default function GameList() {
           )}
         </main>
       </div>
+
+      {/* Undo toast, clear of the home indicator and rounded corners */}
+      <div className="fixed inset-x-0 bottom-safe z-50 flex justify-center px-safe pointer-events-none">
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              key={toast.id}
+              role="status"
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+              className="pointer-events-auto flex items-center gap-3 pl-4 pr-2 py-2 rounded-2xl border-2 border-ink bg-ink text-cream shadow-chunk max-w-md"
+            >
+              <span className="text-sm font-semibold min-w-0 truncate">{toast.message}</span>
+              {toast.undo && (
+                <button
+                  onClick={toast.undo}
+                  className="shrink-0 px-3 py-1.5 rounded-xl border-2 border-cream bg-candy-yellow text-ink font-display font-bold text-sm hover:-translate-y-0.5 transition"
+                >
+                  Undo
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   )
 }
 
-function Sidebar({ filter, onChange, counts }) {
+/** Logo + wordmark; links to the landing page. */
+function Brand({ size = 'lg' }) {
+  const lg = size === 'lg'
+  return (
+    <Link
+      to="/landing"
+      aria-label="About Pointification"
+      title="About Pointification"
+      className="group flex items-center gap-3 min-w-0 rounded-2xl -m-1.5 p-1.5 transition hover:-translate-y-0.5"
+    >
+      <img
+        src="/pointification.png"
+        alt=""
+        className={`${lg ? 'w-12 h-12' : 'w-9 h-9'} shrink-0 object-contain drop-shadow-[2px_2px_0_rgba(26,26,26,0.9)] transition-transform group-hover:rotate-[-8deg] group-hover:scale-105`}
+      />
+      <div className={`min-w-0 ${lg ? '' : 'hidden min-[380px]:block'}`}>
+        <div className={`font-display font-bold leading-none ${lg ? 'text-2xl' : 'text-lg'}`}>Pointification</div>
+        {lg && <div className="text-ink/60 text-sm mt-1">keep score, beautifully.</div>}
+      </div>
+    </Link>
+  )
+}
+
+const AccountIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+)
+
+const HeartIcon = ({ size = 18 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+)
+
+const Chevron = ({ up = false }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`shrink-0 text-ink/40 transition-transform ${up ? '-rotate-90' : ''}`}>
+    <polyline points="9 6 15 12 9 18" />
+  </svg>
+)
+
+/** A sidebar row styled like the filter rows: icon tile, label, trailing bit. */
+const SidebarRow = forwardRef(function SidebarRow({ as: As = 'button', tile, tileBg = '#fff', label, sub, trailing, className = '', ...rest }, ref) {
+  const cls = (active) => `w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border-2 font-display font-semibold transition text-ink text-left ${
+    active ? 'border-ink bg-cream' : 'border-transparent hover:border-ink hover:bg-cream'
+  } ${className}`
+  return (
+    <As
+      ref={ref}
+      {...rest}
+      className={As === NavLink ? ({ isActive }) => cls(isActive) : cls(false)}
+    >
+      <span className="w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0" style={{ background: tileBg }}>
+        {tile}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate leading-tight">{label}</span>
+        {sub && <span className="block truncate text-xs font-sans font-normal text-ink/55 leading-tight">{sub}</span>}
+      </span>
+      {trailing}
+    </As>
+  )
+})
+
+function Sidebar({ filter, onChange, user }) {
+  const name = user?.display_name?.trim()
+  const initial = (name || user?.email || '?')[0]?.toUpperCase()
   return (
     <>
-      {/* Mobile: horizontal scrollable pills */}
+      {/* Mobile: brand + compact actions, then horizontal scrollable pills */}
+      <div className="md:hidden flex items-center justify-between gap-3">
+        <Brand size="sm" />
+        <div className="flex items-center gap-2 shrink-0">
+          <InstallButton />
+          <SupportMenu variant="icon" />
+          <Link
+            to="/account"
+            aria-label="Account"
+            title="Account"
+            className="btn-chunk bg-white p-2 inline-flex items-center"
+          >
+            <AccountIcon />
+          </Link>
+        </div>
+      </div>
       <nav className="md:hidden -mx-4 px-4 overflow-x-auto no-scrollbar">
         <div className="flex gap-2 pb-2 w-max">
           {FILTERS.map(f => {
@@ -203,18 +339,20 @@ function Sidebar({ filter, onChange, counts }) {
                   <Icon />
                 </span>
                 <span>{f.label}</span>
-                <span className="min-w-[22px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink bg-white">
-                  {counts[f.id]}
-                </span>
               </button>
             )
           })}
         </div>
       </nav>
 
-      {/* Desktop: sticky sidebar card */}
-      <aside className="hidden md:block w-56 shrink-0">
-        <div className="card-chunk overflow-hidden sticky top-28">
+      {/* Desktop: brand, filters and actions in one column that stays put
+          while the games scroll (only when the screen is tall enough). */}
+      <aside className="hidden md:flex flex-col gap-5 w-64 shrink-0 self-start [@media(min-height:620px)]:sticky top-10">
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="px-1">
+          <Brand />
+        </motion.div>
+
+        <div className="card-chunk overflow-hidden">
           <div className="px-4 py-3 border-b-2 border-ink bg-cream">
             <h2 className="font-display font-bold text-lg leading-none">Filter</h2>
           </div>
@@ -239,17 +377,31 @@ function Sidebar({ filter, onChange, counts }) {
                       <Icon />
                     </span>
                     <span className="flex-1 text-left truncate">{f.label}</span>
-                    <span
-                      className="min-w-[26px] text-center px-1.5 py-0.5 rounded-md text-xs font-bold border-2 border-ink bg-white"
-                    >
-                      {counts[f.id]}
-                    </span>
                   </button>
                 </li>
               )
             })}
           </ul>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+          className="flex flex-col gap-3"
+        >
+          <InstallButton className="w-full justify-center" />
+          <div className="card-chunk p-2 space-y-1">
+            <SupportMenu variant="row" />
+            <SidebarRow
+              as={NavLink}
+              to="/account"
+              tile={<span className="font-display font-bold text-sm">{initial}</span>}
+              tileBg="#5EE2C1"
+              label={name || 'Account'}
+              sub={name ? 'Account settings' : null}
+              trailing={<Chevron />}
+            />
+          </div>
+        </motion.div>
       </aside>
     </>
   )
@@ -257,7 +409,9 @@ function Sidebar({ filter, onChange, counts }) {
 
 const DONATE_URL = import.meta.env.VITE_DONATE_URL
 
-function SupportMenu() {
+/** `icon`: compact button for the phone top row; `row`: sidebar row whose menu opens upward. */
+function SupportMenu({ variant = 'icon' }) {
+  const isRow = variant === 'row'
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const wrapRef = useRef(null)
@@ -305,28 +459,44 @@ function SupportMenu() {
 
   return (
     <div ref={wrapRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-label="Support"
-        title="Support"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="btn-chunk bg-white text-sm p-2 md:px-4 md:py-2 inline-flex items-center gap-2"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-        <span className="hidden md:inline">Support</span>
-      </button>
+      {isRow ? (
+        <SidebarRow
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          tile={<span className="text-candy-pink"><HeartIcon size={16} /></span>}
+          tileBg="#FFF"
+          label="Support"
+          sub="Share or chip in"
+          trailing={<Chevron up={open} />}
+          className={open ? '!border-ink bg-cream' : ''}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-label="Support"
+          title="Support"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="btn-chunk bg-white p-2 inline-flex items-center"
+        >
+          <HeartIcon />
+        </button>
+      )}
       <AnimatePresence>
         {open && (
           <motion.div
             key="support-menu"
-            initial={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: isRow ? 4 : -4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
+            exit={{ opacity: 0, y: isRow ? 4 : -4 }}
             transition={{ duration: 0.12 }}
             role="menu"
-            className="absolute right-0 top-12 z-50 p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk w-56"
+            className={`absolute z-50 p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk ${
+              isRow ? 'left-0 right-0 bottom-full mb-2' : 'right-0 top-12 w-56'
+            }`}
           >
             <button
               type="button"
@@ -355,7 +525,7 @@ function SupportMenu() {
   )
 }
 
-function FilterHeader({ filter, count }) {
+function FilterHeader({ filter, count, action }) {
   const f = FILTERS.find(x => x.id === filter)
   if (!f) return null
   const label = f.id === 'all' ? 'Your games' : f.label
@@ -363,10 +533,11 @@ function FilterHeader({ filter, count }) {
     <motion.div
       key={filter}
       initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-      className="flex items-baseline gap-3 mb-4"
+      className="flex items-center gap-3 mb-4"
     >
       <h2 className="font-display font-bold text-2xl md:text-3xl leading-none">{label}</h2>
       <span className="text-ink/50 font-semibold">{count}</span>
+      {action && <div className="ml-auto">{action}</div>}
     </motion.div>
   )
 }
@@ -381,6 +552,11 @@ function EmptyForFilter({ filter }) {
       emoji: '📦',
       title: 'Nothing archived',
     },
+    trash: {
+      emoji: '🗑️',
+      title: 'Trash is empty',
+      sub: `Deleted games wait here for ${TRASH_DAYS} days, so you can bring them back.`,
+    },
   }
   const s = map[filter] ?? map.shared
   return (
@@ -390,14 +566,16 @@ function EmptyForFilter({ filter }) {
     >
       <div className="text-5xl md:text-6xl mb-3">{s.emoji}</div>
       <h3 className="font-display text-2xl md:text-3xl font-bold">{s.title}</h3>
+      {s.sub && <p className="text-ink/60 mt-2 max-w-sm mx-auto">{s.sub}</p>}
     </motion.div>
   )
 }
 
-const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete }, ref) {
+const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete, onRestore, onDeleteForever }, ref) {
   const accent = TEAM_PALETTE[i % TEAM_PALETTE.length]
   const teams = game.teams ?? []
   const isArchived = !!game.archived_at
+  const isTrashed = !!game.deleted_at
   const logo = game.logo_path ? logoUrl(game.logo_path) : null
   const logoPct = Math.max(40, Math.min(160, Math.round((game.logo_scale ?? 1) * 100)))
   const [menu, setMenu] = useState(null) // { type: 'show'|'remove', x, y } | null
@@ -414,7 +592,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 200, damping: 20, delay: i * 0.03 }}
       whileHover={{ y: -4, rotate: -0.5 }}
-      className={`card-chunk overflow-hidden group flex flex-col h-full ${isArchived ? 'opacity-70' : ''}`}
+      className={`card-chunk overflow-hidden group flex flex-col h-full ${isArchived || isTrashed ? 'opacity-70 hover:opacity-100 transition-opacity' : ''}`}
     >
       <Link to={`/game/${game.id}`} className="flex flex-col flex-1">
         <div
@@ -444,7 +622,14 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
                 {game.member_count}
               </span>
             )}
-            {isArchived && (
+            {isTrashed ? (
+              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-white text-xs font-bold uppercase tracking-wider">
+                {(() => {
+                  const d = daysLeftInTrash(game.deleted_at)
+                  return d <= 1 ? 'deleted today' : `${d} days left`
+                })()}
+              </span>
+            ) : isArchived && (
               <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-white text-xs font-bold uppercase tracking-wider">
                 archived
               </span>
@@ -486,6 +671,19 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
           </div>
         </div>
       </Link>
+      {isTrashed ? (
+        <div className="flex border-t-2 border-ink">
+          <button onClick={onRestore} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-mint transition inline-flex items-center justify-center gap-2">
+            <RestoreIcon />
+            Restore
+          </button>
+          <div className="w-[2px] bg-ink" />
+          <button onClick={onDeleteForever} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition inline-flex items-center justify-center gap-2">
+            <TrashIcon />
+            Delete forever
+          </button>
+        </div>
+      ) : (
       <div className="flex border-t-2 border-ink">
         <button
           onClick={(e) => openMenu('show', e)}
@@ -507,6 +705,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
           Remove
         </button>
       </div>
+      )}
 
       {menu && createPortal(
         <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
@@ -521,7 +720,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
               {onArchive && (
                 <MenuButton onClick={() => { setMenu(null); onArchive() }} hover="hover:bg-candy-blue hover:text-white" icon={<ArchiveIcon />} label={isArchived ? 'Unarchive' : 'Archive'} />
               )}
-              <MenuButton onClick={() => { setMenu(null); onDelete() }} hover="hover:bg-candy-pink hover:text-white" icon={isOwner ? <TrashIcon /> : <ExitIcon />} label={isOwner ? 'Delete' : 'Leave'} />
+              <MenuButton onClick={() => { setMenu(null); onDelete() }} hover="hover:bg-candy-pink hover:text-white" icon={isOwner ? <TrashIcon /> : <ExitIcon />} label={isOwner ? 'Move to trash' : 'Leave'} />
             </>
           )}
         </ContextMenu>,
@@ -722,6 +921,15 @@ function PeopleIcon() {
     </svg>
   )
 }
+function RestoreIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+  )
+}
+
 function ArchiveIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

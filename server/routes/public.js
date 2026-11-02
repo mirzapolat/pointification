@@ -15,7 +15,10 @@ const PUBLIC_GAME_FIELDS = [
 /** The row behind a share token, or null when sharing is off / unknown. */
 export function findPublicGame(token) {
   if (!token) return null
-  return get('SELECT * FROM games WHERE public_token = ? AND is_public = 1', String(token))
+  return get(
+    'SELECT * FROM games WHERE public_token = ? AND is_public = 1 AND deleted_at IS NULL',
+    String(token)
+  )
 }
 
 export function publicGameView(row) {

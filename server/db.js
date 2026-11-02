@@ -18,6 +18,16 @@ export const db = new DatabaseSync(DB_PATH)
 
 db.exec(readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'))
 
+// schema.sql only creates missing tables, so columns added later need an
+// explicit ALTER on databases that predate them.
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all()
+  if (!cols.some(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+ensureColumn('games', 'deleted_at', 'TEXT')
+
 /** Run `fn` inside a transaction, rolling back if it throws. */
 export function tx(fn) {
   db.exec('BEGIN')

@@ -23,7 +23,7 @@ import { PUBLIC_PAGES, applyMetadata, pageMetadata } from './seo.js'
 
 import authRoutes from './routes/auth.js'
 import accountRoutes from './routes/account.js'
-import gameRoutes from './routes/games.js'
+import gameRoutes, { purgeTrash } from './routes/games.js'
 import teamRoutes from './routes/teams.js'
 import roundRoutes from './routes/rounds.js'
 import publicRoutes, { findPublicGame } from './routes/public.js'
@@ -208,9 +208,14 @@ app.get('*', async (req, res) => {
 
 app.use(errorHandler)
 
-// Expired sessions and verification codes are swept on boot, then hourly.
-pruneSessions()
-setInterval(pruneSessions, 3600_000).unref()
+// Expired sessions, verification codes and long-trashed games are swept on
+// boot, then hourly.
+const sweep = () => {
+  pruneSessions()
+  try { purgeTrash() } catch (err) { console.error('[trash]', err) }
+}
+sweep()
+setInterval(sweep, 3600_000).unref()
 
 createServer(app).listen(PORT, HOST, () => {
   console.log(`[pointification] serving ${DIST_DIR} on http://${HOST}:${PORT}`)

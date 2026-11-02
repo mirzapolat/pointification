@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS games (
   public_token     TEXT UNIQUE,
   allow_negative   INTEGER NOT NULL DEFAULT 0,
   archived_at      TEXT,
+  deleted_at       TEXT,  -- set = in the trash; purged after 30 days
   logo_path        TEXT,
   logo_placement   TEXT CHECK (logo_placement IN ('center', 'top', 'menu')),
   logo_shape       TEXT NOT NULL DEFAULT 'circle' CHECK (logo_shape IN ('circle', 'square')),

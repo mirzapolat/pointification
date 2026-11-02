@@ -22,6 +22,8 @@ const loadGame = wrap(async (req, _res, next) => {
   const row = get('SELECT * FROM games WHERE id = ?', req.params.id)
   if (!row) throw notFound('Game not found.')
   if (!hasGameAccess(row.id, req.user.id)) throw forbidden('You do not have access to this game.')
+  // A trashed game is the owner's alone until it's restored.
+  if (row.deleted_at && row.user_id !== req.user.id) throw notFound('Game not found.')
   req.game = row
   next()
 })
@@ -61,7 +63,8 @@ router.get('/', wrap(async (req, res) => {
   const games = all(
     `SELECT g.* FROM games g
       WHERE g.user_id = ?
-         OR EXISTS (SELECT 1 FROM game_members m WHERE m.game_id = g.id AND m.user_id = ?)
+         OR (g.deleted_at IS NULL
+             AND EXISTS (SELECT 1 FROM game_members m WHERE m.game_id = g.id AND m.user_id = ?))
       ORDER BY g.updated_at DESC`,
     req.user.id, req.user.id
   ).map(serializeGame)
@@ -159,11 +162,49 @@ router.patch('/:id', loadGame, wrap(async (req, res) => {
 }))
 
 // DELETE /api/games/:id
+// --- Trash ---------------------------------------------------------------
+
+export const TRASH_DAYS = 30
+
+/** Hard delete: the row (cascading to teams, rounds, logs, members) and its logo. */
+function destroyGame(game) {
+  const watchers = audience(game.id)
+  run('DELETE FROM games WHERE id = ?', game.id)
+  deleteLogoDir(`${game.user_id}/${game.id}`)
+  emitGame(game.id, 'DELETE', watchers)
+}
+
+/** Permanently removes games that have sat in the trash past the grace period. */
+export function purgeTrash() {
+  const cutoff = new Date(Date.now() - TRASH_DAYS * 86400_000).toISOString()
+  for (const game of all('SELECT id, user_id FROM games WHERE deleted_at IS NOT NULL AND deleted_at < ?', cutoff)) {
+    destroyGame(game)
+  }
+}
+
+// DELETE /api/games/:id — move to the trash. Collaborators stop seeing it,
+// and its public link stops resolving, until it is restored.
 router.delete('/:id', loadGame, requireOwner, wrap(async (req, res) => {
-  const watchers = audience(req.game.id)
-  run('DELETE FROM games WHERE id = ?', req.game.id)
-  deleteLogoDir(`${req.game.user_id}/${req.game.id}`)
-  emitGame(req.game.id, 'DELETE', watchers)
+  if (!req.game.deleted_at) {
+    // Tell collaborators before they lose read access to it.
+    const watchers = audience(req.game.id)
+    run('UPDATE games SET deleted_at = ? WHERE id = ?', nowIso(), req.game.id)
+    emitGame(req.game.id, 'UPDATE', watchers)
+  }
+  res.json({ game: serializeGame(get('SELECT * FROM games WHERE id = ?', req.game.id)) })
+}))
+
+// POST /api/games/:id/restore — take it back out of the trash.
+router.post('/:id/restore', loadGame, requireOwner, wrap(async (req, res) => {
+  run('UPDATE games SET deleted_at = NULL WHERE id = ?', req.game.id)
+  emitGame(req.game.id, 'UPDATE', audience(req.game.id))
+  res.json({ game: serializeGame(get('SELECT * FROM games WHERE id = ?', req.game.id)) })
+}))
+
+// DELETE /api/games/:id/permanent — empty it from the trash for good.
+router.delete('/:id/permanent', loadGame, requireOwner, wrap(async (req, res) => {
+  if (!req.game.deleted_at) throw badRequest('Move the game to the trash first.')
+  destroyGame(req.game)
   res.json({ ok: true })
 }))
 
