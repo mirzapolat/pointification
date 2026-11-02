@@ -144,7 +144,7 @@ export default function GameList() {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full pb-home bg-cream bg-grid"
     >
-      <div className="max-w-7xl mx-auto px-safe [--px:1rem] md:[--px:2.5rem] pt-safe [--pt:1.25rem] md:[--pt:2.5rem] pb-10 flex flex-col md:flex-row gap-5 md:gap-8">
+      <div className="max-w-6xl mx-auto px-safe [--px:1rem] md:[--px:2.5rem] pt-safe [--pt:1.25rem] md:[--pt:3.5rem] pb-10 flex flex-col md:flex-row gap-5 md:gap-8">
         <Sidebar
           filter={filter}
           onChange={setFilter}
@@ -269,15 +269,9 @@ const HeartIcon = ({ size = 18 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
 )
 
-const Chevron = ({ up = false }) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`shrink-0 text-ink/40 transition-transform ${up ? '-rotate-90' : ''}`}>
-    <polyline points="9 6 15 12 9 18" />
-  </svg>
-)
-
-/** A sidebar row styled like the filter rows: icon tile, label, trailing bit. */
-const SidebarRow = forwardRef(function SidebarRow({ as: As = 'button', tile, tileBg = '#fff', label, sub, trailing, className = '', ...rest }, ref) {
-  const cls = (active) => `w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border-2 font-display font-semibold transition text-ink text-left ${
+/** Compact half-width sidebar button: icon tile stacked over a label. */
+const SidebarTile = forwardRef(function SidebarTile({ as: As = 'button', tile, tileBg = '#fff', label, className = '', ...rest }, ref) {
+  const cls = (active) => `w-full h-full flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl border-2 font-display font-semibold text-sm transition text-ink ${
     active ? 'border-ink bg-cream' : 'border-transparent hover:border-ink hover:bg-cream'
   } ${className}`
   return (
@@ -289,11 +283,7 @@ const SidebarRow = forwardRef(function SidebarRow({ as: As = 'button', tile, til
       <span className="w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0" style={{ background: tileBg }}>
         {tile}
       </span>
-      <span className="flex-1 min-w-0">
-        <span className="block truncate leading-tight">{label}</span>
-        {sub && <span className="block truncate text-xs font-sans font-normal text-ink/55 leading-tight">{sub}</span>}
-      </span>
-      {trailing}
+      <span className="block max-w-full truncate leading-tight">{label}</span>
     </As>
   )
 })
@@ -389,16 +379,15 @@ function Sidebar({ filter, onChange, user }) {
           className="flex flex-col gap-3"
         >
           <InstallButton className="w-full justify-center" />
-          <div className="card-chunk p-2 space-y-1">
+          <div className="card-chunk p-2 grid grid-cols-2 gap-1">
             <SupportMenu variant="row" />
-            <SidebarRow
+            <SidebarTile
               as={NavLink}
               to="/account"
+              title={name ? `${name} · Account settings` : 'Account'}
               tile={<span className="font-display font-bold text-sm">{initial}</span>}
               tileBg="#5EE2C1"
               label={name || 'Account'}
-              sub={name ? 'Account settings' : null}
-              trailing={<Chevron />}
             />
           </div>
         </motion.div>
@@ -460,16 +449,15 @@ function SupportMenu({ variant = 'icon' }) {
   return (
     <div ref={wrapRef} className="relative">
       {isRow ? (
-        <SidebarRow
+        <SidebarTile
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-haspopup="menu"
           aria-expanded={open}
+          title="Share or chip in"
           tile={<span className="text-candy-pink"><HeartIcon size={16} /></span>}
           tileBg="#FFF"
           label="Support"
-          sub="Share or chip in"
-          trailing={<Chevron up={open} />}
           className={open ? '!border-ink bg-cream' : ''}
         />
       ) : (
@@ -495,7 +483,7 @@ function SupportMenu({ variant = 'icon' }) {
             transition={{ duration: 0.12 }}
             role="menu"
             className={`absolute z-50 p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk ${
-              isRow ? 'left-0 right-0 bottom-full mb-2' : 'right-0 top-12 w-56'
+              isRow ? 'left-0 bottom-full mb-2 w-56' : 'right-0 top-12 w-56'
             }`}
           >
             <button
