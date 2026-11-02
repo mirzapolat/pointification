@@ -25,18 +25,10 @@ export default function GameScreen() {
   const [rounds, setRounds] = useState([])
   const [roundNet, setRoundNet] = useState({}) // { [teamId]: net delta within active round }
   const [roundMenu, setRoundMenu] = useState(null) // { left, top, width } | null
-  const [isWide, setIsWide] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches)
   const roundBtnRef = useRef(null)
   const undoTimer = useRef(null)
   const dialogs = useDialogs()
   useWakeLock(!!game)
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const on = () => setIsWide(mq.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
 
   const openRoundMenu = () => {
     if (roundMenu) { setRoundMenu(null); return }
@@ -233,12 +225,14 @@ export default function GameScreen() {
   const curIdx = orderedRounds.findIndex(r => r.id === game.current_round_id)
   const curRound = curIdx >= 0 ? orderedRounds[curIdx] : null
 
+  // Takes the title's place in the header; the arrows drop away on phones so
+  // it fits between "← Games" and the icon buttons.
   const roundControls = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <button
         onClick={() => curIdx > 0 && setCurrentRound(orderedRounds[curIdx - 1].id)}
         disabled={curIdx <= 0}
-        className="w-9 h-9 grid place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
+        className="w-9 h-9 hidden sm:grid shrink-0 place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
         aria-label="Previous round"
         title="Previous round"
       >‹</button>
@@ -247,7 +241,7 @@ export default function GameScreen() {
         onClick={openRoundMenu}
         aria-haspopup="menu"
         aria-expanded={!!roundMenu}
-        className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-[8.5rem] text-center truncate hover:bg-candy-yellow transition inline-flex items-center justify-center gap-1.5"
+        className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-0 sm:min-w-[8.5rem] text-center truncate hover:bg-candy-yellow transition inline-flex items-center justify-center gap-1.5"
         title="Switch round"
       >
         <span className="truncate">{curRound?.name || 'Round'}</span>
@@ -259,7 +253,7 @@ export default function GameScreen() {
       <button
         onClick={() => curIdx >= 0 && curIdx < orderedRounds.length - 1 && setCurrentRound(orderedRounds[curIdx + 1].id)}
         disabled={curIdx < 0 || curIdx >= orderedRounds.length - 1}
-        className="w-9 h-9 grid place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
+        className="w-9 h-9 hidden sm:grid shrink-0 place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
         aria-label="Next round"
         title="Next round"
       >›</button>
@@ -272,9 +266,10 @@ export default function GameScreen() {
       {/* top bar */}
       <header className="shrink-0 px-safe [--px:1rem] md:[--px:1.5rem] py-3 flex items-center justify-between gap-3 bg-cream border-b-2 border-ink z-10">
         <button onClick={() => nav('/')} className="btn-chunk bg-white text-sm py-2 px-3 shrink-0">← Games</button>
-        <div className="flex items-center gap-3 min-w-0 flex-1 justify-center">
-          <h1 className="font-display font-bold text-xl md:text-2xl truncate">{game.name}</h1>
-          {roundsOn && isWide && <div className="shrink-0">{roundControls}</div>}
+        <div className="flex items-center min-w-0 flex-1 justify-center">
+          {roundsOn
+            ? roundControls
+            : <h1 className="font-display font-bold text-xl md:text-2xl truncate">{game.name}</h1>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
@@ -305,13 +300,6 @@ export default function GameScreen() {
         </div>
       </header>
 
-      {/* round switcher — its own bar on narrow screens, in the header otherwise */}
-      {roundsOn && !isWide && (
-        <div className="shrink-0 px-safe [--px:0.75rem] py-2 flex items-center justify-center bg-cream border-b-2 border-ink z-10">
-          {roundControls}
-        </div>
-      )}
-
       {roundMenu && createPortal(
         <motion.div
           data-round-menu
@@ -321,6 +309,7 @@ export default function GameScreen() {
           style={{ position: 'fixed', left: roundMenu.left, top: roundMenu.top, width: roundMenu.width }}
           className="z-[120] p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk max-h-[60vh] overflow-y-auto no-scrollbar"
         >
+          <div className="px-3 pt-1.5 pb-2 text-[11px] font-bold uppercase tracking-wider text-ink/50 truncate">{game.name}</div>
           {orderedRounds.map((r, i) => {
             const isCur = r.id === game.current_round_id
             return (

@@ -65,6 +65,12 @@ export const verifyMfaCode = (code) =>
 
 export const signOut = () => request('/auth/logout', { method: 'POST' })
 
+// Passkey ceremonies — see lib/passkeys.js for the browser side.
+export const passkeyLoginOptions = () => request('/auth/passkey/options', { method: 'POST' })
+export const passkeyLogin = (response) => request('/auth/passkey', { method: 'POST', body: { response } })
+export const passkeyMfaOptions = () => request('/auth/mfa/passkey/options', { method: 'POST' })
+export const passkeyMfa = (response) => request('/auth/mfa/passkey', { method: 'POST', body: { response } })
+
 // --- Account -------------------------------------------------------------
 
 export const updateAccount = (patch) => request('/account', { method: 'PATCH', body: patch })
@@ -83,6 +89,13 @@ export const enrollMfa = () => request('/account/mfa/enroll', { method: 'POST' }
 export const enableMfa = (code) => request('/account/mfa/enable', { method: 'POST', body: { code } })
 export const disableMfa = (code) => request('/account/mfa/disable', { method: 'POST', body: { code } })
 export const cancelMfaEnrollment = () => request('/account/mfa/cancel', { method: 'POST' })
+
+export const listPasskeys = () => pick(request('/account/passkeys'), 'passkeys')
+export const passkeyRegistrationOptions = () => request('/account/passkeys/options', { method: 'POST' })
+export const registerPasskey = (response, name) =>
+  request('/account/passkeys', { method: 'POST', body: { response, name } })
+export const deletePasskey = (id) =>
+  request(`/account/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 export const getUserDetails = () => pick(request('/account/details'), 'details')
 

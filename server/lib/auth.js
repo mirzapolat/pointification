@@ -2,6 +2,7 @@
 import crypto from 'node:crypto'
 import { db, get, run, nowIso } from '../db.js'
 import { unauthorized, forbidden } from './http.js'
+import { hasPasskey, pruneChallenges } from './passkeys.js'
 
 const SESSION_COOKIE = 'pf_session'
 const SESSION_DAYS = 30
@@ -77,7 +78,18 @@ export const readSessionCookie = (req) => req.cookies?.[SESSION_COOKIE] ?? null
 export function pruneSessions() {
   run('DELETE FROM sessions WHERE expires_at < ?', nowIso())
   run('DELETE FROM email_codes WHERE expires_at < ?', nowIso())
+  pruneChallenges()
 }
+
+// --- Second factors ------------------------------------------------------
+
+/** Which second factors an account has: an authenticator app and/or passkeys. */
+export const mfaMethods = (user) => ({
+  totp: !!user.totp_confirmed_at,
+  passkey: hasPasskey(user.id),
+})
+
+export const hasSecondFactor = (user) => !!user.totp_confirmed_at || hasPasskey(user.id)
 
 // --- Middleware ----------------------------------------------------------
 
@@ -110,7 +122,9 @@ export function attachUser(req, _res, next) {
 /** Requires a signed-in user who has cleared 2FA if their account has it on. */
 export function requireAuth(req, _res, next) {
   if (!req.user) return next(unauthorized())
-  if (req.user.totp_confirmed_at && req.session.aal !== 'aal2') {
+  // Sessions start at aal2 unless a second factor was owed at sign-in, so the
+  // passkey lookup only runs for sessions that are still mid-step-up.
+  if (req.session.aal !== 'aal2' && hasSecondFactor(req.user)) {
     return next(forbidden('Two-factor verification required.'))
   }
   next()

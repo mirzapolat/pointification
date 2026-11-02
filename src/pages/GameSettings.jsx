@@ -488,7 +488,6 @@ function SettingsForm({ initial, user, nav }) {
                     logoPath={logoPath}
                     placement={logoPlacement}
                     shape={logoShape}
-                    scale={logoScale}
                     pendingPreview={pendingPreview}
                     removeLogo={removeLogo}
                     busy={logoBusy}
@@ -711,7 +710,7 @@ const LOGO_TYPES = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,imag
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024  // before cropping; the crop is re-encoded small
 const MAX_RAW_BYTES = 2 * 1024 * 1024      // "skip cropping" uploads the file as-is
 
-function LogoSection({ logoPath, placement, shape, scale, pendingPreview, removeLogo, busy, onFile, onPlacement, onShape, onClear }) {
+function LogoSection({ logoPath, placement, shape, pendingPreview, removeLogo, busy, onFile, onPlacement, onShape, onClear }) {
   const fileRef = useRef(null)
   const [localErr, setLocalErr] = useState(null)
   const [dragOver, setDragOver] = useState(false)
@@ -826,6 +825,16 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
           ) : hasLogo ? (
             <>
               <div className="text-sm font-semibold">{pendingPreview ? 'New logo ready' : 'Looking good'}</div>
+              {placement !== 'top' && (
+                <div className="flex gap-1.5 flex-wrap mt-2" role="group" aria-label="Badge shape">
+                  <ShapeChip active={shape === 'circle'} onClick={() => onShape('circle')} label="Circle">
+                    <span className="w-4 h-4 rounded-full border-2 border-ink bg-white block" />
+                  </ShapeChip>
+                  <ShapeChip active={shape === 'square'} onClick={() => onShape('square')} label="Rounded">
+                    <span className="w-4 h-4 rounded-[5px] border-2 border-ink bg-white block" />
+                  </ShapeChip>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -904,32 +913,6 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
                 />
               </div>
 
-              <AnimatePresence initial={false}>
-                {placement === 'center' && (
-                  <motion.div
-                    key="center-tuning"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="mt-3 p-3 rounded-2xl border-2 border-dashed border-ink/20 flex items-center gap-3">
-                      <BadgePreview src={currentUrl} shape={shape} scale={scale} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold mb-1.5">Badge shape</div>
-                        <div className="flex gap-2 flex-wrap">
-                          <ShapeChip active={shape === 'circle'} onClick={() => onShape('circle')} label="Circle">
-                            <span className="w-5 h-5 rounded-full border-2 border-ink bg-white block" />
-                          </ShapeChip>
-                          <ShapeChip active={shape === 'square'} onClick={() => onShape('square')} label="Rounded">
-                            <span className="w-5 h-5 rounded-md border-2 border-ink bg-white block" />
-                          </ShapeChip>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           </motion.div>
         )}
@@ -942,26 +925,13 @@ function LogoSection({ logoPath, placement, shape, scale, pendingPreview, remove
   )
 }
 
-function BadgePreview({ src, shape, scale }) {
-  const radius = shape === 'square' ? 'rounded-xl' : 'rounded-full'
-  const pct = Math.round(scale * 100)
-  return (
-    <div className={`shrink-0 w-20 h-20 ${radius} border-2 border-ink bg-white shadow-chunk-sm grid place-items-center overflow-hidden`}>
-      {src ? (
-        <img src={src} alt="" className="object-contain" style={{ width: `${pct}%`, height: `${pct}%` }} />
-      ) : (
-        <div className="text-[10px] text-ink/50 font-semibold">no logo</div>
-      )}
-    </div>
-  )
-}
-
 function ShapeChip({ active, onClick, label, children }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-ink font-display font-semibold text-sm transition ${
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border-2 border-ink font-display font-semibold text-xs transition ${
         active ? 'bg-candy-mint shadow-chunk-sm -translate-y-0.5' : 'bg-white hover:bg-cream'
       }`}
     >

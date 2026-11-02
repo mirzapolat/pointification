@@ -8,8 +8,9 @@ import { mailEnabled, sendVerificationCode } from '../lib/mail.js'
 import { verifyTotp } from '../lib/totp.js'
 import {
   hashPassword, verifyPassword, createSession, destroySession, upgradeSession,
-  setSessionCookie, clearSessionCookie, requireSession,
+  setSessionCookie, clearSessionCookie, requireSession, mfaMethods,
 } from '../lib/auth.js'
+import { authenticationOptions, verifyPasskey } from '../lib/passkeys.js'
 
 const router = express.Router()
 
@@ -35,23 +36,31 @@ function issueCode(userId, email) {
   return code
 }
 
-/** Signs the user in and returns the payload the client's auth context expects. */
-function startSession(res, user) {
-  const aal = user.totp_confirmed_at ? 'aal1' : 'aal2'
-  const { token, expires } = createSession(user.id, aal)
+/**
+ * Signs the user in and returns the payload the client's auth context expects.
+ * A passkey sign-in is already two factors (device + biometric/PIN), so it
+ * skips the step-up; a password sign-in owes one if the account has any.
+ */
+function startSession(res, user, { viaPasskey = false } = {}) {
+  const methods = mfaMethods(user)
+  const owesFactor = !viaPasskey && (methods.totp || methods.passkey)
+  const { token, expires } = createSession(user.id, owesFactor ? 'aal1' : 'aal2')
   setSessionCookie(res, token, expires)
   return {
     user: serializeUser(user),
-    mfa_required: !!user.totp_confirmed_at,
+    mfa_required: owesFactor,
+    mfa_methods: owesFactor ? methods : null,
   }
 }
 
 function sessionPayload(req) {
-  if (!req.user) return { user: null, mfa_required: false, details: null }
-  const mfaRequired = !!req.user.totp_confirmed_at && req.session.aal !== 'aal2'
+  if (!req.user) return { user: null, mfa_required: false, mfa_methods: null, details: null }
+  const methods = req.session.aal === 'aal2' ? null : mfaMethods(req.user)
+  const mfaRequired = !!methods && (methods.totp || methods.passkey)
   return {
     user: serializeUser(req.user),
     mfa_required: mfaRequired,
+    mfa_methods: mfaRequired ? methods : null,
     details: mfaRequired
       ? null
       : serializeDetails(get('SELECT * FROM user_details WHERE user_id = ?', req.user.id)),
@@ -166,6 +175,35 @@ router.post('/mfa', requireSession, wrap(async (req, res) => {
   upgradeSession(req.sessionToken, 'aal2')
   req.session.aal = 'aal2'
   res.json(sessionPayload(req))
+}))
+
+// POST /api/auth/mfa/passkey/options — challenge for a passkey step-up.
+router.post('/mfa/passkey/options', requireSession, wrap(async (req, res) => {
+  res.json(await authenticationOptions(req, res, req.user))
+}))
+
+// POST /api/auth/mfa/passkey — passkey as the second factor after a password.
+router.post('/mfa/passkey', requireSession, wrap(async (req, res) => {
+  await verifyPasskey(req, res, req.body?.response, req.user)
+  upgradeSession(req.sessionToken, 'aal2')
+  req.session.aal = 'aal2'
+  res.json(sessionPayload(req))
+}))
+
+// POST /api/auth/passkey/options — challenge for passwordless sign-in.
+router.post('/passkey/options', wrap(async (req, res) => {
+  res.json(await authenticationOptions(req, res))
+}))
+
+// POST /api/auth/passkey — passwordless sign-in with a discoverable passkey.
+router.post('/passkey', wrap(async (req, res) => {
+  const userId = await verifyPasskey(req, res, req.body?.response)
+  const user = get('SELECT * FROM users WHERE id = ?', userId)
+  if (!user) throw unauthorized('That passkey is not registered here.')
+  if (!user.email_confirmed_at) throw unauthorized('Verify your email before signing in.')
+  // Replace any half-finished session (e.g. one waiting on a TOTP code).
+  destroySession(req.sessionToken)
+  res.json(startSession(res, user, { viaPasskey: true }))
 }))
 
 // POST /api/auth/logout

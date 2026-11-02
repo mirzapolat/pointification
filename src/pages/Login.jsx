@@ -3,9 +3,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
 import { track } from '../lib/analytics.js'
+import { passkeysSupported } from '../lib/passkeys.js'
 
 export default function Login() {
-  const { signIn, signUp, signOut, user, mfaRequired, verifyMfaCode } = useAuth()
+  const {
+    signIn, signUp, signOut, user, mfaRequired, mfaMethods,
+    verifyMfaCode, verifyMfaPasskey, signInWithPasskey,
+  } = useAuth()
+  const canPasskey = passkeysSupported()
   const nav = useNavigate()
   const [mode, setMode] = useState('signin')
   const [name, setName] = useState('')
@@ -41,6 +46,15 @@ export default function Login() {
     }
   }
 
+  const passkeySignIn = async () => {
+    setErr(null)
+    setBusy(true)
+    const { error } = await signInWithPasskey()
+    setBusy(false)
+    if (error) setErr(error.message)
+    else track('passkey-signin')
+  }
+
   const showMfa = user && mfaRequired
 
   return (
@@ -66,7 +80,10 @@ export default function Login() {
 
         {showMfa ? (
           <MfaChallenge
+            methods={mfaMethods ?? { totp: true, passkey: false }}
+            canPasskey={canPasskey}
             onSubmit={verifyMfaCode}
+            onPasskey={verifyMfaPasskey}
             onCancel={async () => { await signOut() }}
           />
         ) : (
@@ -132,6 +149,21 @@ export default function Login() {
                 {busy ? 'one sec…' : mode === 'signin' ? 'Sign in →' : 'Create account →'}
               </button>
             </form>
+
+            {mode === 'signin' && canPasskey && (
+              <>
+                <Divider />
+                <button
+                  type="button"
+                  onClick={passkeySignIn}
+                  disabled={busy}
+                  className="btn-chunk w-full bg-white inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <KeyIcon />
+                  Sign in with a passkey
+                </button>
+              </>
+            )}
           </>
         )}
       </motion.div>
@@ -148,10 +180,11 @@ export default function Login() {
   )
 }
 
-function MfaChallenge({ onSubmit, onCancel }) {
+function MfaChallenge({ methods, canPasskey, onSubmit, onPasskey, onCancel }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const offerPasskey = methods.passkey && canPasskey
 
   const submit = async (e) => {
     e.preventDefault()
@@ -161,36 +194,74 @@ function MfaChallenge({ onSubmit, onCancel }) {
     if (error) setErr(error.message)
   }
 
+  const usePasskey = async () => {
+    setErr(null); setBusy(true)
+    const { error } = await onPasskey()
+    setBusy(false)
+    if (error) setErr(error.message)
+  }
+
   return (
     <div>
       <div className="mb-4">
         <div className="text-[11px] font-bold uppercase tracking-wider text-ink/60">Two-factor auth</div>
-        <h2 className="font-display font-bold text-2xl">Enter your code</h2>
-        <p className="text-sm text-ink/70 mt-1">Open your authenticator app and enter the 6-digit code for Pointification.</p>
+        <h2 className="font-display font-bold text-2xl">
+          {methods.totp ? 'Enter your code' : 'Confirm with your passkey'}
+        </h2>
+        <p className="text-sm text-ink/70 mt-1">
+          {methods.totp
+            ? 'Open your authenticator app and enter the 6-digit code for Pointification.'
+            : 'Use the passkey saved on your device to finish signing in.'}
+          {methods.totp && offerPasskey && ' Or use your passkey instead.'}
+        </p>
       </div>
-      <form onSubmit={submit} className="space-y-3">
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={6}
-          autoFocus
-          value={code}
-          onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-          placeholder="123456"
-          className="input-chunk font-mono tracking-[0.4em] text-center text-xl"
-          aria-label="6-digit code"
-        />
+      <div className="space-y-3">
+        {offerPasskey && (
+          <button
+            type="button"
+            onClick={usePasskey}
+            disabled={busy}
+            autoFocus={!methods.totp}
+            className={`btn-chunk w-full inline-flex items-center justify-center gap-2 disabled:opacity-60 ${
+              methods.totp ? 'bg-white' : 'bg-candy-pink text-white text-lg'
+            }`}
+          >
+            <KeyIcon />
+            {busy && !methods.totp ? 'waiting for passkey…' : 'Use passkey'}
+          </button>
+        )}
+        {methods.passkey && !canPasskey && !methods.totp && (
+          <div className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60">
+            This browser can't use passkeys. Try another browser or device.
+          </div>
+        )}
+        {offerPasskey && methods.totp && <Divider />}
+        {methods.totp && (
+          <form onSubmit={submit} className="space-y-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              autoFocus
+              value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="123456"
+              className="input-chunk font-mono tracking-[0.4em] text-center text-xl"
+              aria-label="6-digit code"
+            />
+            <button
+              type="submit"
+              disabled={busy || code.length !== 6}
+              className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60"
+            >
+              {busy ? 'verifying…' : 'Verify →'}
+            </button>
+          </form>
+        )}
         {err && (
           <div className="text-sm px-3 py-2 rounded-xl border-2 border-ink bg-candy-yellow/60">{err}</div>
         )}
-        <button
-          type="submit"
-          disabled={busy || code.length !== 6}
-          className="btn-chunk w-full bg-candy-pink text-white text-lg disabled:opacity-60"
-        >
-          {busy ? 'verifying…' : 'Verify →'}
-        </button>
         <button
           type="button"
           onClick={onCancel}
@@ -199,8 +270,29 @@ function MfaChallenge({ onSubmit, onCancel }) {
         >
           Cancel & sign out
         </button>
-      </form>
+      </div>
     </div>
+  )
+}
+
+function Divider() {
+  return (
+    <div className="flex items-center gap-3 my-4 text-xs font-bold uppercase tracking-wider text-ink/50">
+      <span className="flex-1 h-0.5 bg-ink/15" />
+      or
+      <span className="flex-1 h-0.5 bg-ink/15" />
+    </div>
+  )
+}
+
+function KeyIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="M10.7 12.3 21 2" />
+      <path d="m16 7 3 3" />
+      <path d="m19 4 2 2" />
+    </svg>
   )
 }
 

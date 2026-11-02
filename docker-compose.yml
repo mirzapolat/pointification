@@ -21,6 +21,8 @@ services:
       PORT: 3000
       DATABASE_PATH: /data/pointification.db
       LOGO_DIR: /data/logos
+      # Public origin; passkeys are bound to this host name.
+      APP_URL: ${APP_URL:-https://pointification.de}
       # Optional: without SMTP, new accounts are verified automatically.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

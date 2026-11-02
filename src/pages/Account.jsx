@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import * as api from '../lib/api'
 import { useAuth } from '../lib/auth.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
+import { addPasskey, passkeysSupported } from '../lib/passkeys.js'
 
 export default function Account() {
   const { user, signOut } = useAuth()
@@ -42,6 +43,7 @@ export default function Account() {
         <NameCard />
         <EmailCard currentEmail={user?.email} />
         <PasswordCard />
+        <PasskeysCard />
         <TwoFactorCard />
         <PrivacyCard />
         <DangerCard onDeleted={async () => { await signOut(); nav('/login', { replace: true }) }} />
@@ -323,7 +325,7 @@ function TwoFactorCard() {
   }
 
   return (
-    <Section title="Two-factor auth" accent="#4D7CFF">
+    <Section title="Authenticator app" accent="#4D7CFF">
       {enabled === null ? (
         <div className="text-sm text-ink/60">Loading…</div>
       ) : enrolling ? (
@@ -427,6 +429,106 @@ function TwoFactorCard() {
           <Banner kind="ok">{msg}</Banner>
         </div>
       )}
+    </Section>
+  )
+}
+
+/** A friendly default label for a new passkey, e.g. "iPhone" or "Mac". */
+function guessDeviceName() {
+  const ua = navigator.userAgent
+  if (/iPhone/.test(ua)) return 'iPhone'
+  if (/iPad/.test(ua)) return 'iPad'
+  if (/Android/.test(ua)) return 'Android'
+  if (/Macintosh/.test(ua)) return navigator.maxTouchPoints > 1 ? 'iPad' : 'Mac'
+  if (/Windows/.test(ua)) return 'Windows'
+  if (/CrOS/.test(ua)) return 'Chromebook'
+  if (/Linux/.test(ua)) return 'Linux'
+  return 'Passkey'
+}
+
+const formatDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null
+
+function PasskeysCard() {
+  const dialogs = useDialogs()
+  const supported = passkeysSupported()
+  const [passkeys, setPasskeys] = useState(null) // null while loading
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [msg, setMsg] = useState(null)
+
+  const load = async () => {
+    const { data, error } = await api.listPasskeys()
+    if (error) { setErr(error.message); setPasskeys([]); return }
+    setPasskeys(data ?? [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  const add = async () => {
+    setErr(null); setMsg(null); setBusy(true)
+    const { error } = await addPasskey(guessDeviceName())
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setMsg('Passkey added. You can now sign in with it, and it also works as your second factor.')
+    await load()
+  }
+
+  const remove = async (pk) => {
+    const ok = await dialogs.confirm({
+      title: `Remove "${pk.name}"?`,
+      message: 'You won\'t be able to sign in with this passkey anymore. Also delete it from your device or password manager.',
+      confirmLabel: 'Remove',
+    })
+    if (!ok) return
+    setErr(null); setMsg(null)
+    const { error } = await api.deletePasskey(pk.id)
+    if (error) return setErr(error.message)
+    await load()
+  }
+
+  return (
+    <Section title="Passkeys" accent="#5EE2C1">
+      <p className="text-sm text-ink/80 mb-4">
+        Sign in with Face ID, Touch ID, Windows Hello or a security key — no password needed.
+        When you sign in with your password, a passkey also works as your second factor.
+      </p>
+      {passkeys === null ? (
+        <div className="text-sm text-ink/60">Loading…</div>
+      ) : (
+        <>
+          {passkeys.length > 0 && (
+            <ul className="space-y-2 mb-4">
+              {passkeys.map(pk => (
+                <li key={pk.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border-2 border-ink bg-white">
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{pk.name}</div>
+                    <div className="text-xs text-ink/60">
+                      Added {formatDate(pk.created_at)}
+                      {pk.last_used_at && <> · last used {formatDate(pk.last_used_at)}</>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => remove(pk)}
+                    className="btn-chunk bg-white text-sm py-1.5 px-3 shrink-0"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {supported ? (
+            <button onClick={add} disabled={busy} className="btn-chunk bg-candy-mint disabled:opacity-60">
+              {busy ? 'Waiting for passkey…' : passkeys.length ? 'Add another passkey' : 'Add a passkey'}
+            </button>
+          ) : (
+            <div className="text-sm text-ink/60">This browser doesn't support passkeys.</div>
+          )}
+        </>
+      )}
+      <Banner kind="error">{err}</Banner>
+      <Banner kind="ok">{msg}</Banner>
     </Section>
   )
 }

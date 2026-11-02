@@ -6,6 +6,8 @@ import { badRequest, wrap } from '../lib/http.js'
 import { generateSecret, otpauthUri, verifyTotp } from '../lib/totp.js'
 import { hashPassword, verifyPassword, requireAuth, destroyUserSessions, clearSessionCookie } from '../lib/auth.js'
 import { deleteLogoDir } from '../lib/logos.js'
+import { listPasskeys, registrationOptions, registerPasskey, deletePasskey } from '../lib/passkeys.js'
+import { notFound } from '../lib/http.js'
 
 const router = express.Router()
 router.use(requireAuth)
@@ -101,6 +103,31 @@ router.post('/mfa/cancel', wrap(async (req, res) => {
   if (!req.user.totp_confirmed_at) {
     run('UPDATE users SET totp_secret = NULL WHERE id = ?', req.user.id)
   }
+  res.json({ ok: true })
+}))
+
+// --- Passkeys ------------------------------------------------------------
+
+// GET /api/account/passkeys
+router.get('/passkeys', wrap(async (req, res) => {
+  res.json({ passkeys: listPasskeys(req.user.id) })
+}))
+
+// POST /api/account/passkeys/options — begin registering a new passkey.
+router.post('/passkeys/options', wrap(async (req, res) => {
+  res.json(await registrationOptions(req, res, req.user))
+}))
+
+// POST /api/account/passkeys — finish registration. The current session has
+// already cleared any 2FA (requireAuth), so it stays at aal2.
+router.post('/passkeys', wrap(async (req, res) => {
+  const passkey = await registerPasskey(req, res, req.user, req.body?.response, req.body?.name)
+  res.status(201).json({ passkey })
+}))
+
+// DELETE /api/account/passkeys/:id
+router.delete('/passkeys/:id', wrap(async (req, res) => {
+  if (!deletePasskey(req.user.id, req.params.id)) throw notFound('Passkey not found.')
   res.json({ ok: true })
 }))
 

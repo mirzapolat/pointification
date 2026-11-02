@@ -34,12 +34,35 @@ CREATE TABLE IF NOT EXISTS sessions (
   id          TEXT PRIMARY KEY,
   user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT NOT NULL UNIQUE,
-  -- 'aal1' = password only, 'aal2' = password + TOTP for this session.
+  -- 'aal1' = password only, 'aal2' = password + second factor, or a passkey.
   aal         TEXT NOT NULL DEFAULT 'aal1',
   created_at  TEXT NOT NULL,
   expires_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
+
+-- WebAuthn passkeys. Any registered passkey also counts as a second factor,
+-- so password sign-ins then need a passkey (or TOTP) to reach aal2.
+CREATE TABLE IF NOT EXISTS passkeys (
+  id           TEXT PRIMARY KEY,           -- credential ID, base64url
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  public_key   TEXT NOT NULL,              -- COSE public key, base64url
+  counter      INTEGER NOT NULL DEFAULT 0,
+  transports   TEXT NOT NULL DEFAULT '[]', -- JSON array
+  name         TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS passkeys_user_idx ON passkeys(user_id);
+
+-- Short-lived WebAuthn challenges, referenced by an httpOnly cookie.
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT REFERENCES users(id) ON DELETE CASCADE,
+  purpose    TEXT NOT NULL CHECK (purpose IN ('register', 'login', 'mfa')),
+  challenge  TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS user_details (
   user_id                 TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

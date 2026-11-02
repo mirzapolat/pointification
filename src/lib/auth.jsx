@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import * as api from './api'
+import * as passkeys from './passkeys'
 
 const AuthCtx = createContext(null)
 
@@ -11,6 +12,7 @@ const AuthCtx = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [mfaRequired, setMfaRequired] = useState(false)
+  const [mfaMethods, setMfaMethods] = useState(null)
   const [details, setDetails] = useState(null)
   const [loading, setLoading] = useState(true)
   const [detailsLoading, setDetailsLoading] = useState(true)
@@ -18,6 +20,7 @@ export function AuthProvider({ children }) {
   const applySession = useCallback((payload) => {
     setUser(payload?.user ?? null)
     setMfaRequired(!!payload?.mfa_required)
+    setMfaMethods(payload?.mfa_methods ?? null)
     setDetails(payload?.details ?? null)
     setLoading(false)
     setDetailsLoading(false)
@@ -50,6 +53,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     mfaRequired,
+    mfaMethods,
     details,
     detailsLoading,
     refresh,
@@ -59,10 +63,13 @@ export function AuthProvider({ children }) {
     verifySignupCode: (email, code) => withRefresh(() => api.verifySignupCode(email, code)),
     resendSignupCode: (email) => api.resendSignupCode(email),
     verifyMfaCode: (code) => withRefresh(() => api.verifyMfaCode(code)),
+    signInWithPasskey: () => withRefresh(passkeys.signInWithPasskey),
+    verifyMfaPasskey: () => withRefresh(passkeys.verifyMfaWithPasskey),
     signOut: async () => {
       await api.signOut()
       setUser(null)
       setMfaRequired(false)
+      setMfaMethods(null)
       setDetails(null)
     },
   }
