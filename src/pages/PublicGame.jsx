@@ -121,9 +121,6 @@ export default function PublicGame() {
               Log
             </Link>
           )}
-          <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
-            live
-          </span>
         </div>
       </header>
 

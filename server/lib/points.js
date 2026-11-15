@@ -7,12 +7,26 @@ import { serializeLog } from './serialize.js'
 import { notFound } from './http.js'
 
 /** Log rows joined with who made (and who undid) each change. Append filters. */
-export const LOG_SELECT = `SELECT l.*, u.email AS user_email, u.display_name AS user_name,
-                                  ub.display_name AS undone_by_name
+// A user's own display name wins; the owner's nickname for them is the fallback.
+export const EFFECTIVE_NAME = (u, m) => `COALESCE(NULLIF(TRIM(${u}.display_name), ''), NULLIF(TRIM(${m}.nickname), ''))`
+
+export const LOG_SELECT = `SELECT l.*, u.email AS user_email, ${EFFECTIVE_NAME('u', 'gm')} AS user_name,
+                                  ${EFFECTIVE_NAME('ub', 'gmb')} AS undone_by_name
                              FROM point_logs l
                              LEFT JOIN users u  ON u.id  = l.user_id
                              LEFT JOIN users ub ON ub.id = l.undone_by
+                             LEFT JOIN game_members gm  ON gm.game_id  = l.game_id AND gm.user_id  = l.user_id
+                             LEFT JOIN game_members gmb ON gmb.game_id = l.game_id AND gmb.user_id = l.undone_by
                             WHERE l.game_id = ?`
+
+/** The name to show for `user` in `gameId`: their own, else the owner's nickname. */
+export function nameInGame(gameId, user) {
+  const own = user?.display_name?.trim()
+  if (own) return own
+  if (!user?.id) return null
+  const row = get('SELECT nickname FROM game_members WHERE game_id = ? AND user_id = ?', gameId, user.id)
+  return row?.nickname?.trim() || null
+}
 
 /**
  * Adds `delta` to a team's score and records a log entry.

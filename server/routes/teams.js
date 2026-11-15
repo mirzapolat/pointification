@@ -5,7 +5,7 @@ import { serializeTeam } from '../lib/serialize.js'
 import { badRequest, forbidden, notFound, wrap, requireString } from '../lib/http.js'
 import { requireAuth, hasGameAccess } from '../lib/auth.js'
 import { publish } from '../lib/events.js'
-import { applyPointChange } from '../lib/points.js'
+import { applyPointChange, nameInGame } from '../lib/points.js'
 import { notifyPointChange } from '../lib/push.js'
 
 const router = express.Router()
@@ -60,7 +60,7 @@ router.post('/:id/points', loadTeam, wrap(async (req, res) => {
 
   const { log, team } = applyPointChange({
     teamId: req.team.id, delta, userId: req.user.id, userEmail: req.user.email,
-    userName: req.user.display_name ?? null,
+    userName: nameInGame(req.team.game_id, req.user),
   })
   if (log) {
     publish(req.team.game_id, { table: 'teams', type: 'UPDATE', row: serializeTeam(team) })

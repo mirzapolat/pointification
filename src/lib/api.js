@@ -201,6 +201,9 @@ export const listMembers = (gameId) => request(`/games/${gameId}/members`)
 export const inviteMember = (gameId, email) =>
   pick(request(`/games/${gameId}/members`, { method: 'POST', body: { email } }), 'member')
 
+export const setMemberNickname = (gameId, userId, nickname) =>
+  pick(request(`/games/${gameId}/members/${userId}`, { method: 'PATCH', body: { nickname } }), 'member')
+
 export const removeMember = (gameId, userId) =>
   request(`/games/${gameId}/members/${userId}`, { method: 'DELETE' })
 

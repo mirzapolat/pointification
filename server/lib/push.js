@@ -99,7 +99,7 @@ export function notifyPointChange({ log, team, actor }) {
     if (!game || game.deleted_at) return
     const ids = recipients(game.id, actor?.id)
     if (!ids.length) return
-    const who = actor?.display_name?.trim() || 'Someone'
+    const who = log.user_name?.trim() || actor?.display_name?.trim() || 'Someone'
     const amount = log.delta > 0 ? `+${log.delta}` : `−${Math.abs(log.delta)}`
     sendTo(ids, {
       title: game.name,

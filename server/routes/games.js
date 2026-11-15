@@ -370,11 +370,12 @@ const memberView = (r) => ({
   created_at: r.created_at,
   email: r.email,
   display_name: r.display_name ?? null,
+  nickname: r.nickname ?? null,
 })
 
 router.get('/:id/members', loadGame, wrap(async (req, res) => {
   const members = all(
-    `SELECT m.user_id, m.created_at, u.email, u.display_name
+    `SELECT m.user_id, m.created_at, m.nickname, u.email, u.display_name
        FROM game_members m JOIN users u ON u.id = m.user_id
       WHERE m.game_id = ? ORDER BY m.created_at`,
     req.game.id
@@ -405,12 +406,32 @@ router.post('/:id/members', loadGame, requireOwner, wrap(async (req, res) => {
   publish(req.game.id, { table: 'game_members', type: 'INSERT', row: { game_id: req.game.id, user_id: invitee.id } },
     { userIds: [invitee.id] })
   const member = get(
-    `SELECT m.user_id, m.created_at, u.email, u.display_name
+    `SELECT m.user_id, m.created_at, m.nickname, u.email, u.display_name
        FROM game_members m JOIN users u ON u.id = m.user_id
       WHERE m.game_id = ? AND m.user_id = ?`,
     req.game.id, invitee.id
   )
   res.status(201).json({ member: memberView(member) })
+}))
+
+// PATCH /api/games/:id/members/:userId — owner sets a nickname for a
+// collaborator. It only shows while they have no display name of their own.
+router.patch('/:id/members/:userId', loadGame, requireOwner, wrap(async (req, res) => {
+  const target = req.params.userId
+  const existing = get('SELECT 1 AS ok FROM game_members WHERE game_id = ? AND user_id = ?', req.game.id, target)
+  if (!existing) throw notFound('That collaborator is not on this game.')
+  const raw = String(req.body?.nickname ?? '').trim()
+  if (raw.length > 40) throw badRequest('Nickname must be 40 characters or fewer.')
+  if (/\S+@\S+\.\S+/.test(raw)) throw badRequest('A nickname can\'t be an email address.')
+  run('UPDATE game_members SET nickname = ? WHERE game_id = ? AND user_id = ?', raw || null, req.game.id, target)
+  publish(req.game.id, { table: 'game_members', type: 'UPDATE', row: { game_id: req.game.id, user_id: target } })
+  const member = get(
+    `SELECT m.user_id, m.created_at, m.nickname, u.email, u.display_name
+       FROM game_members m JOIN users u ON u.id = m.user_id
+      WHERE m.game_id = ? AND m.user_id = ?`,
+    req.game.id, target
+  )
+  res.json({ member: memberView(member) })
 }))
 
 // DELETE /api/games/:id/members/:userId — owner removes, or a member leaves.

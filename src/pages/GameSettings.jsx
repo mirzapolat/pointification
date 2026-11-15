@@ -408,6 +408,7 @@ function SettingsForm({ initial, user, nav }) {
     { id: 'scoring', label: 'Scoring' },
     { id: 'rounds', label: 'Rounds' },
     ...(isEdit && isOwner ? [{ id: 'sharing', label: 'Sharing' }] : []),
+    ...(isEdit ? [{ id: 'notifications', label: 'Notifications' }] : []),
   ]
 
   return (
@@ -484,8 +485,6 @@ function SettingsForm({ initial, user, nav }) {
                 placeholder="Friday Quiz Night"
                 autoFocus={!isEdit}
               />
-
-              {isEdit && <NotifySection gameId={initial.id} />}
 
               {isOwner && (
                 <div className="mt-6">
@@ -672,6 +671,10 @@ function SettingsForm({ initial, user, nav }) {
                 </>
               )}
             </div>
+          )}
+
+          {tab === 'notifications' && isEdit && (
+            <NotifySection gameId={initial.id} />
           )}
 
           {tab === 'sharing' && isEdit && isOwner && (
@@ -1033,8 +1036,8 @@ function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLo
 
   const rotate = async () => {
     const ok = await dialogs.confirm({
-      title: 'Regenerate link?',
-      message: 'A new public link will be created. The current one will stop working immediately.',
+      title: 'Regenerate link & QR code?',
+      message: 'A new public link and QR code will be created. The current link and any printed or shared QR codes will stop working immediately.',
       confirmLabel: 'Regenerate',
       tone: 'danger',
     })
@@ -1097,11 +1100,16 @@ function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLo
                   onFocus={e => e.target.select()}
                   className="input-chunk font-mono text-sm bg-candy-yellow/40"
                 />
-                <div className="flex gap-2">
-                  <button type="button" onClick={copy} className="btn-chunk bg-white flex-1">
-                    {copied ? 'Copied!' : 'Copy'}
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={copy} className="btn-chunk bg-candy-mint flex-1">
+                    {copied ? 'Copied!' : 'Copy link'}
                   </button>
-                  <button type="button" onClick={rotate} disabled={busy} className="btn-chunk bg-candy-pink text-white flex-1 disabled:opacity-60">
+                  <button
+                    type="button"
+                    onClick={rotate}
+                    disabled={busy}
+                    className="shrink-0 px-3 py-2 rounded-xl text-sm font-semibold text-ink/60 hover:text-rose-700 hover:bg-rose-50 transition disabled:opacity-60"
+                  >
                     Regenerate
                   </button>
                 </div>
@@ -1310,7 +1318,7 @@ function NotifySection({ gameId }) {
   }
 
   return (
-    <div className="mt-6 p-4 rounded-2xl border-2 border-ink bg-white">
+    <div className="p-4 rounded-2xl border-2 border-ink bg-white">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="text-sm font-semibold">Notify me about this game</div>
@@ -1375,6 +1383,14 @@ function MembersSection({ gameId }) {
     else setMembers(ms => ms.filter(m => m.user_id !== userId))
   }
 
+  const saveNickname = async (userId, nickname) => {
+    setErr(null)
+    const { data: member, error } = await api.setMemberNickname(gameId, userId, nickname)
+    if (error) { setErr(error.message); return false }
+    setMembers(ms => ms.map(m => m.user_id === userId ? member : m))
+    return true
+  }
+
   return (
     <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
       <label className="block text-sm font-semibold">People with access</label>
@@ -1392,7 +1408,8 @@ function MembersSection({ gameId }) {
               person={m}
               role="Collaborator"
               roleClass="bg-candy-mint"
-              onRemove={() => remove(m.user_id, m.display_name || m.email)}
+              onRemove={() => remove(m.user_id, m.display_name || m.nickname || m.email)}
+              onNickname={m.display_name?.trim() ? null : (nick) => saveNickname(m.user_id, nick)}
             />
           ))}
         </AnimatePresence>
@@ -1422,9 +1439,23 @@ function MembersSection({ gameId }) {
   )
 }
 
-function PersonRow({ person, role, roleClass, onRemove }) {
-  const name = person.display_name?.trim()
+function PersonRow({ person, role, roleClass, onRemove, onNickname }) {
+  const ownName = person.display_name?.trim()
+  const nickname = !ownName ? person.nickname?.trim() : null
+  const name = ownName || nickname
   const initial = (name || person.email || '?')[0]?.toUpperCase()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const startEdit = () => { setDraft(nickname ?? ''); setEditing(true) }
+  const save = async (e) => {
+    e?.preventDefault()
+    if (draft.trim() === (nickname ?? '')) return setEditing(false)
+    setSaving(true)
+    const ok = await onNickname(draft.trim())
+    setSaving(false)
+    if (ok) setEditing(false)
+  }
   const since = role !== 'Owner' && person.created_at
     ? new Date(person.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
     : null
@@ -1438,10 +1469,43 @@ function PersonRow({ person, role, roleClass, onRemove }) {
         {initial}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold truncate">{name || 'No name yet'}</span>
-          <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border-2 border-ink ${roleClass}`}>{role}</span>
-        </div>
+        {editing ? (
+          <form onSubmit={save} className="flex items-center gap-1.5">
+            <input
+              autoFocus
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}
+              maxLength={40}
+              placeholder="Nickname"
+              aria-label="Nickname"
+              className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border-2 border-ink bg-white text-sm font-semibold outline-none"
+            />
+            <button disabled={saving} className="shrink-0 px-2.5 py-1 rounded-lg border-2 border-ink bg-candy-mint text-sm font-semibold disabled:opacity-60">
+              {saving ? '…' : 'Save'}
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="shrink-0 px-2 py-1 rounded-lg text-sm font-semibold text-ink/60 hover:text-ink">
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`font-semibold truncate ${name ? '' : 'text-ink/50'}`}>{name || 'No name yet'}</span>
+            {nickname && (
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-ink/45" title="Nickname you set. Replaced once they add a name to their account.">nickname</span>
+            )}
+            <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border-2 border-ink ${roleClass}`}>{role}</span>
+            {onNickname && (
+              <button
+                type="button"
+                onClick={startEdit}
+                className="shrink-0 text-xs font-semibold text-ink/55 hover:text-ink underline underline-offset-2"
+              >
+                {nickname ? 'Edit' : 'Set nickname'}
+              </button>
+            )}
+          </div>
+        )}
         <div className="text-xs text-ink/60 truncate">
           {person.email}{since ? ` · since ${since}` : ''}
         </div>

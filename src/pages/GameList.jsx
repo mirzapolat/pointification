@@ -144,7 +144,7 @@ export default function GameList() {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full pb-home bg-cream bg-grid"
     >
-      <div className="max-w-6xl mx-auto px-safe [--px:1rem] md:[--px:2.5rem] pt-safe [--pt:1.25rem] md:[--pt:3.5rem] pb-10 flex flex-col md:flex-row gap-5 md:gap-8">
+      <div className="max-w-7xl mx-auto px-safe [--px:1rem] md:[--px:2.5rem] pt-safe [--pt:1.25rem] md:[--pt:3.5rem] pb-10 flex flex-col md:flex-row gap-5 md:gap-8">
         <Sidebar
           filter={filter}
           onChange={setFilter}
@@ -179,7 +179,7 @@ export default function GameList() {
               ) : visible.length === 0 && allowCreate ? (
                 <EmptyState filter={filter} onCreate={() => nav('/game/new')} />
               ) : (
-                <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <motion.div layout className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-5">
                   <AnimatePresence mode="popLayout">
                     {visible.map((g, i) => {
                       const isOwner = g.user_id === user?.id
@@ -269,9 +269,9 @@ const HeartIcon = ({ size = 18 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
 )
 
-/** Compact half-width sidebar button: icon tile stacked over a label. */
-const SidebarTile = forwardRef(function SidebarTile({ as: As = 'button', tile, tileBg = '#fff', label, className = '', ...rest }, ref) {
-  const cls = (active) => `w-full h-full flex flex-col items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl border-2 font-display font-semibold text-sm transition text-ink ${
+/** Sidebar row styled like the filter rows: icon tile, label, optional hint. */
+const SidebarRow = forwardRef(function SidebarRow({ as: As = 'button', icon, label, hint, className = '', ...rest }, ref) {
+  const cls = (active) => `w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border-2 font-display font-semibold transition text-ink text-left ${
     active ? 'border-ink bg-cream' : 'border-transparent hover:border-ink hover:bg-cream'
   } ${className}`
   return (
@@ -280,17 +280,19 @@ const SidebarTile = forwardRef(function SidebarTile({ as: As = 'button', tile, t
       {...rest}
       className={As === NavLink ? ({ isActive }) => cls(isActive) : cls(false)}
     >
-      <span className="w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0" style={{ background: tileBg }}>
-        {tile}
+      <span className="w-8 h-8 rounded-lg border-2 border-ink grid place-items-center shrink-0 bg-white">
+        {icon}
       </span>
-      <span className="block max-w-full truncate leading-tight">{label}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate leading-tight">{label}</span>
+        {hint && <span className="block truncate text-xs font-sans font-medium text-ink/50 leading-tight mt-0.5">{hint}</span>}
+      </span>
     </As>
   )
 })
 
 function Sidebar({ filter, onChange, user }) {
   const name = user?.display_name?.trim()
-  const initial = (name || user?.email || '?')[0]?.toUpperCase()
   return (
     <>
       {/* Mobile: brand + compact actions, then horizontal scrollable pills */}
@@ -336,7 +338,7 @@ function Sidebar({ filter, onChange, user }) {
 
       {/* Desktop: brand, filters and actions in one column that stays put
           while the games scroll (only when the screen is tall enough). */}
-      <aside className="hidden md:flex flex-col gap-5 w-64 shrink-0 self-start [@media(min-height:620px)]:sticky top-10">
+      <aside className="hidden md:flex flex-col gap-5 w-60 shrink-0 self-start [@media(min-height:620px)]:sticky top-10">
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="px-1">
           <Brand />
         </motion.div>
@@ -380,17 +382,19 @@ function Sidebar({ filter, onChange, user }) {
           <InstallButton className="w-full justify-center" />
           {/* Phones get the floating card instead; the sidebar only shows from md up. */}
           <InstallPrompt className="md:hidden" />
-          <div className="card-chunk p-2 grid grid-cols-2 gap-1">
-            <SupportMenu variant="row" />
-            <SidebarTile
-              as={NavLink}
-              to="/account"
-              title={name ? `${name} · Account settings` : 'Account'}
-              tile={<span className="font-display font-bold text-sm">{initial}</span>}
-              tileBg="#5EE2C1"
-              label={name || 'Account'}
-            />
-          </div>
+          <ul className="card-chunk p-2 space-y-1">
+            <li>
+              <SidebarRow
+                as={NavLink}
+                to="/account"
+                title="Account settings"
+                icon={<AccountIcon />}
+                label="Account"
+                hint={name || user?.email}
+              />
+            </li>
+            <li><SupportMenu variant="row" /></li>
+          </ul>
         </motion.div>
       </aside>
     </>
@@ -450,15 +454,15 @@ function SupportMenu({ variant = 'icon' }) {
   return (
     <div ref={wrapRef} className="relative">
       {isRow ? (
-        <SidebarTile
+        <SidebarRow
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-haspopup="menu"
           aria-expanded={open}
           title="Share or chip in"
-          tile={<span className="text-candy-pink"><HeartIcon size={16} /></span>}
-          tileBg="#FFF"
+          icon={<span className="text-candy-pink"><HeartIcon size={16} /></span>}
           label="Support"
+          hint="Share or chip in"
           className={open ? '!border-ink bg-cream' : ''}
         />
       ) : (
@@ -568,9 +572,25 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
   const logo = game.logo_path ? logoUrl(game.logo_path) : null
   const logoPct = Math.max(40, Math.min(160, Math.round((game.logo_scale ?? 1) * 100)))
   const [menu, setMenu] = useState(null) // { type: 'show'|'remove', x, y } | null
+  const [linkCopied, setLinkCopied] = useState(false)
   const openMenu = (type, e) => {
     e.preventDefault()
+    setLinkCopied(false)
     setMenu({ type, x: e.clientX, y: e.clientY })
+  }
+  const publicUrl = game.is_public && game.public_token
+    ? `${window.location.origin}/p/${encodeURIComponent(game.public_token)}`
+    : null
+  const copyPublicLink = async () => {
+    if (!publicUrl) return
+    try {
+      await navigator.clipboard.writeText(publicUrl)
+      setLinkCopied(true)
+      setTimeout(() => setMenu(null), 900)
+    } catch {
+      window.prompt('Copy the public link:', publicUrl)
+      setMenu(null)
+    }
   }
   return (
     <motion.div
@@ -679,7 +699,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
           aria-haspopup="menu"
           className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-yellow transition"
         >
-          Show
+          View
         </button>
         <div className="w-[2px] bg-ink" />
         <button onClick={onEdit} className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-mint transition">
@@ -691,7 +711,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
           aria-haspopup="menu"
           className="flex-1 py-2.5 font-display font-semibold hover:bg-candy-pink hover:text-white transition"
         >
-          Remove
+          Hide
         </button>
       </div>
       )}
@@ -704,6 +724,12 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
               <MenuLink to={`/game/${game.id}/log`} hover="hover:bg-candy-yellow" icon={<LogIcon />} label="Log" onSelect={() => setMenu(null)} />
               <MenuLink to={`/game/${game.id}/analytics`} hover="hover:bg-candy-mint" icon={<ChartIcon />} label="Analytics" onSelect={() => setMenu(null)} />
               <MenuLink to={`/game/${game.id}/podium`} hover="hover:bg-candy-blue hover:text-white" icon={<PodiumIcon />} label="Podium" onSelect={() => setMenu(null)} />
+              {publicUrl && (
+                <>
+                  <div className="h-[2px] bg-ink/10 my-1 mx-2" />
+                  <MenuButton onClick={copyPublicLink} hover="hover:bg-candy-mint" icon={<LinkIcon />} label={linkCopied ? 'Copied!' : 'Copy public link'} />
+                </>
+              )}
             </>
           ) : (
             <>
@@ -826,7 +852,7 @@ function EmptyState({ filter, onCreate }) {
 
 function SkeletonGrid() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-5">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="card-chunk h-64 animate-pulse" />
       ))}
@@ -873,6 +899,15 @@ function PodiumIcon() {
     </svg>
   )
 }
+function LinkIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  )
+}
+
 function TrashIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

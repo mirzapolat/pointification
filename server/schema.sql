@@ -143,6 +143,8 @@ CREATE TABLE IF NOT EXISTS game_members (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   added_by   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
+  -- Set by the owner; only shown while the user has no display name of their own.
+  nickname   TEXT,
   PRIMARY KEY (game_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS game_members_user_idx ON game_members(user_id);

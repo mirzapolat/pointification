@@ -66,7 +66,6 @@ export default function PublicLog() {
           <div className="text-[11px] font-bold uppercase tracking-wider text-ink/50 leading-none mb-1">Log</div>
           <h1 className="font-display font-bold text-lg md:text-2xl truncate leading-none">{data.game.name}</h1>
         </div>
-        <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider shrink-0">live</span>
       </header>
       <main className="max-w-3xl mx-auto px-4 md:px-8 py-6 md:py-10">
         <AuditLog logs={data.logs} teams={data.teams} rounds={data.rounds} />

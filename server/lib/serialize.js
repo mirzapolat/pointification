@@ -79,6 +79,10 @@ export function serializeLog(row) {
   }
 }
 
+// A display name that is itself an email address must not leak through the share link.
+const EMAIL_LIKE = /\S+@\S+\.\S+/
+const publicName = (name) => (name && !EMAIL_LIKE.test(name) ? name : null)
+
 /** A log entry as anonymous share-link viewers see it: names, never emails or ids. */
 export function serializePublicLog(row) {
   if (!row) return null
@@ -86,12 +90,12 @@ export function serializePublicLog(row) {
     id: row.id,
     team_id: row.team_id,
     round_id: row.round_id ?? null,
-    user_name: row.user_name ?? null,
+    user_name: publicName(row.user_name),
     delta: row.delta,
     new_score: row.new_score,
     created_at: row.created_at,
     undone_at: row.undone_at ?? null,
-    undone_by_name: row.undone_by_name ?? null,
+    undone_by_name: publicName(row.undone_by_name),
   }
 }
 
