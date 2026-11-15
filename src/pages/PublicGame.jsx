@@ -105,10 +105,26 @@ export default function PublicGame() {
             <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
           </span>
         </Link>
-        <h1 className="font-display font-bold text-xl md:text-2xl truncate px-3">{game.name}</h1>
-        <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
-          live
-        </span>
+        <h1 className="font-display font-bold text-xl md:text-2xl truncate px-3 min-w-0">{game.name}</h1>
+        <div className="flex items-center gap-2 shrink-0">
+          {game.public_log && (
+            <Link
+              to={`/p/${encodeURIComponent(token)}/log`}
+              className="btn-chunk bg-white text-xs h-8 py-0 px-2.5 shadow-chunk-sm"
+              aria-label="Show log"
+              title="Show log"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+              Log
+            </Link>
+          )}
+          <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-white text-xs font-bold uppercase tracking-wider">
+            live
+          </span>
+        </div>
       </header>
 
       <div className="flex-1 flex flex-col overflow-hidden relative">

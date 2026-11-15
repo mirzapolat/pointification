@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   display_name       TEXT,
   email_confirmed_at TEXT,
   allow_invites      INTEGER NOT NULL DEFAULT 1,
+  -- Master switch for push notifications about score changes (all devices).
+  notify_points      INTEGER NOT NULL DEFAULT 0,
   totp_secret        TEXT,
   totp_confirmed_at  TEXT,
   created_at         TEXT NOT NULL,
@@ -81,6 +83,7 @@ CREATE TABLE IF NOT EXISTS games (
   name             TEXT NOT NULL,
   is_public        INTEGER NOT NULL DEFAULT 0,
   public_token     TEXT UNIQUE,
+  public_log       INTEGER NOT NULL DEFAULT 0,  -- share link may also show the log
   allow_negative   INTEGER NOT NULL DEFAULT 0,
   archived_at      TEXT,
   deleted_at       TEXT,  -- set = in the trash; purged after 30 days
@@ -126,7 +129,10 @@ CREATE TABLE IF NOT EXISTS point_logs (
   round_id   TEXT REFERENCES rounds(id) ON DELETE SET NULL,
   delta      INTEGER NOT NULL,
   new_score  INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Undo keeps the row for the audit log and only marks it as reversed.
+  undone_at  TEXT,
+  undone_by  TEXT REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS point_logs_team_id_idx  ON point_logs(team_id);
 CREATE INDEX IF NOT EXISTS point_logs_game_id_idx  ON point_logs(game_id);
@@ -140,3 +146,28 @@ CREATE TABLE IF NOT EXISTS game_members (
   PRIMARY KEY (game_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS game_members_user_idx ON game_members(user_id);
+
+-- Web Push endpoints, one per browser/device the user enabled notifications on.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint   TEXT NOT NULL UNIQUE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
+
+-- Per-game override of users.notify_points. No row = follow the global switch.
+CREATE TABLE IF NOT EXISTS game_notify_prefs (
+  game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL,
+  PRIMARY KEY (game_id, user_id)
+);
+
+-- Small key/value store for server-generated config (e.g. VAPID keys).
+CREATE TABLE IF NOT EXISTS app_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

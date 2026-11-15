@@ -3,6 +3,12 @@
 
 const bool = (v) => v === 1 || v === true
 
+// What anonymous share-link viewers may see of a game, over HTTP and SSE.
+export const PUBLIC_GAME_FIELDS = [
+  'id', 'name', 'is_public', 'public_token', 'public_log',
+  'logo_path', 'logo_placement', 'logo_shape', 'logo_scale', 'team_sort',
+]
+
 export function serializeGame(row) {
   if (!row) return null
   let presets
@@ -13,6 +19,7 @@ export function serializeGame(row) {
     name: row.name,
     is_public: bool(row.is_public),
     public_token: row.public_token ?? null,
+    public_log: bool(row.public_log),
     allow_negative: bool(row.allow_negative),
     archived_at: row.archived_at ?? null,
     deleted_at: row.deleted_at ?? null,
@@ -62,10 +69,29 @@ export function serializeLog(row) {
     user_id: row.user_id ?? null,
     // Joined in so the activity log can name who scored without a second query.
     user_email: row.user_email ?? null,
+    user_name: row.user_name ?? null,
     round_id: row.round_id ?? null,
     delta: row.delta,
     new_score: row.new_score,
     created_at: row.created_at,
+    undone_at: row.undone_at ?? null,
+    undone_by_name: row.undone_by_name ?? null,
+  }
+}
+
+/** A log entry as anonymous share-link viewers see it: names, never emails or ids. */
+export function serializePublicLog(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    team_id: row.team_id,
+    round_id: row.round_id ?? null,
+    user_name: row.user_name ?? null,
+    delta: row.delta,
+    new_score: row.new_score,
+    created_at: row.created_at,
+    undone_at: row.undone_at ?? null,
+    undone_by_name: row.undone_by_name ?? null,
   }
 }
 
@@ -76,6 +102,7 @@ export function serializeUser(row) {
     email: row.email,
     display_name: row.display_name ?? null,
     allow_invites: bool(row.allow_invites),
+    notify_points: bool(row.notify_points),
     email_confirmed_at: row.email_confirmed_at ?? null,
     two_factor_enabled: !!row.totp_confirmed_at,
     created_at: row.created_at,

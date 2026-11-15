@@ -34,8 +34,9 @@ export default function GameScreen() {
     if (roundMenu) { setRoundMenu(null); return }
     const r = roundBtnRef.current?.getBoundingClientRect()
     if (!r) return
-    const width = Math.max(220, r.width)
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8))
+    const width = Math.min(Math.max(220, r.width), window.innerWidth - 16)
+    // Centred under the button, since the button sits in the middle of the bar.
+    const left = Math.max(8, Math.min(r.left + r.width / 2 - width / 2, window.innerWidth - width - 8))
     setRoundMenu({ left, top: r.bottom + 6, width })
   }
 
@@ -225,79 +226,98 @@ export default function GameScreen() {
   const curIdx = orderedRounds.findIndex(r => r.id === game.current_round_id)
   const curRound = curIdx >= 0 ? orderedRounds[curIdx] : null
 
-  // Takes the title's place in the header; the arrows drop away on phones so
-  // it fits between "← Games" and the icon buttons.
-  const roundControls = (
+  // The header's centre: one dropdown with the game (or current round) as its
+  // label. It holds round switching and the links that used to crowd the bar.
+  // Prev/next arrows only appear from sm up, where there is room for them.
+  const arrowCls = 'w-10 h-10 hidden sm:grid shrink-0 place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition'
+  const centerControls = (
     <div className="flex items-center gap-2 min-w-0">
-      <button
-        onClick={() => curIdx > 0 && setCurrentRound(orderedRounds[curIdx - 1].id)}
-        disabled={curIdx <= 0}
-        className="w-9 h-9 hidden sm:grid shrink-0 place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
-        aria-label="Previous round"
-        title="Previous round"
-      >‹</button>
+      {roundsOn && (
+        <button
+          onClick={() => curIdx > 0 && setCurrentRound(orderedRounds[curIdx - 1].id)}
+          disabled={curIdx <= 0}
+          className={arrowCls}
+          aria-label="Previous round"
+          title="Previous round"
+        >‹</button>
+      )}
       <button
         ref={roundBtnRef}
         onClick={openRoundMenu}
         aria-haspopup="menu"
         aria-expanded={!!roundMenu}
-        className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-0 sm:min-w-[8.5rem] text-center truncate hover:bg-candy-yellow transition inline-flex items-center justify-center gap-1.5"
-        title="Switch round"
+        className="h-10 px-3 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-0 max-w-full sm:min-w-[8.5rem] hover:bg-candy-yellow transition inline-flex items-center justify-center gap-1.5"
+        title={roundsOn ? 'Switch round' : 'Game menu'}
       >
-        <span className="truncate">{curRound?.name || 'Round'}</span>
-        <span className="text-ink/50 shrink-0">({curIdx >= 0 ? curIdx + 1 : '–'}/{orderedRounds.length})</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-transform ${roundMenu ? 'rotate-180' : ''}`}>
+        {roundsOn ? (
+          <>
+            <span className="truncate">{curRound?.name || 'Round'}</span>
+            <span className="text-ink/50 shrink-0 tabular-nums">({curIdx >= 0 ? curIdx + 1 : '–'}/{orderedRounds.length})</span>
+          </>
+        ) : (
+          <span className="truncate text-base md:text-lg font-bold">{game.name}</span>
+        )}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 transition-transform ${roundMenu ? 'rotate-180' : ''}`}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      <button
-        onClick={() => curIdx >= 0 && curIdx < orderedRounds.length - 1 && setCurrentRound(orderedRounds[curIdx + 1].id)}
-        disabled={curIdx < 0 || curIdx >= orderedRounds.length - 1}
-        className="w-9 h-9 hidden sm:grid shrink-0 place-items-center rounded-xl border-2 border-ink bg-white font-display font-bold text-lg leading-none disabled:opacity-30 hover:bg-candy-yellow transition"
-        aria-label="Next round"
-        title="Next round"
-      >›</button>
+      {roundsOn && (
+        <button
+          onClick={() => curIdx >= 0 && curIdx < orderedRounds.length - 1 && setCurrentRound(orderedRounds[curIdx + 1].id)}
+          disabled={curIdx < 0 || curIdx >= orderedRounds.length - 1}
+          className={arrowCls}
+          aria-label="Next round"
+          title="Next round"
+        >›</button>
+      )}
     </div>
+  )
+
+  const menuLink = (to, label, icon, hover) => (
+    <button
+      key={to}
+      type="button"
+      role="menuitem"
+      onClick={() => { setRoundMenu(null); nav(to) }}
+      className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm transition ${hover}`}
+    >
+      <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white">{icon}</span>
+      {label}
+    </button>
   )
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 flex flex-col bg-ink">
-      {/* top bar */}
-      <header className="shrink-0 px-safe [--px:1rem] md:[--px:1.5rem] py-3 flex items-center justify-between gap-3 bg-cream border-b-2 border-ink z-10">
-        <button onClick={() => nav('/')} className="btn-chunk bg-white text-sm py-2 px-3 shrink-0">← Games</button>
+      {/* top bar: back · menu · undo */}
+      <header className="shrink-0 px-safe [--px:1rem] md:[--px:1.5rem] py-3 flex items-center justify-between gap-2 sm:gap-3 bg-cream border-b-2 border-ink z-10">
+        <button
+          onClick={() => nav('/')}
+          className="btn-chunk bg-white text-sm h-10 py-0 px-2.5 md:px-3 shrink-0"
+          aria-label="Back to games"
+          title="Back to games"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="md:hidden" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+          <span className="hidden md:inline">← Games</span>
+        </button>
         <div className="flex items-center min-w-0 flex-1 justify-center">
-          {roundsOn
-            ? roundControls
-            : <h1 className="font-display font-bold text-xl md:text-2xl truncate">{game.name}</h1>}
+          {centerControls}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleUndo}
-            disabled={undoBusy}
-            className={`btn-chunk text-sm py-2 p-2 md:px-3 inline-flex items-center gap-2 transition-colors disabled:opacity-60 ${undoArmed ? 'bg-candy-pink text-white' : 'bg-white'}`}
-            aria-label={undoArmed ? 'Confirm undo' : 'Undo last point change'}
-            title={undoArmed ? 'Tap again to confirm' : 'Undo last point change'}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="1 4 1 10 7 10"/>
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-            </svg>
-            <span className={undoArmed ? 'inline' : 'hidden md:inline'}>{undoArmed ? 'Confirm?' : 'Undo'}</span>
-          </button>
-          <button
-            onClick={() => nav(`/game/${id}/settings`)}
-            className="btn-chunk bg-white text-sm py-2 p-2 md:px-3 inline-flex items-center gap-2"
-            aria-label="Game settings"
-            title="Game settings"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span className="hidden md:inline">Settings</span>
-          </button>
-        </div>
+        <button
+          onClick={handleUndo}
+          disabled={undoBusy}
+          className={`btn-chunk text-sm h-10 py-0 px-2.5 md:px-3 shrink-0 inline-flex items-center gap-2 transition-colors disabled:opacity-60 ${undoArmed ? 'bg-candy-pink text-white' : 'bg-white'}`}
+          aria-label={undoArmed ? 'Confirm undo' : 'Undo last point change'}
+          title={undoArmed ? 'Tap again to confirm' : 'Undo last point change'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+          <span className={undoArmed ? 'inline' : 'hidden md:inline'}>{undoArmed ? 'Confirm?' : 'Undo'}</span>
+        </button>
       </header>
 
       {roundMenu && createPortal(
@@ -307,35 +327,43 @@ export default function GameScreen() {
           transition={{ duration: 0.1 }}
           role="menu"
           style={{ position: 'fixed', left: roundMenu.left, top: roundMenu.top, width: roundMenu.width }}
-          className="z-[120] p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk max-h-[60vh] overflow-y-auto no-scrollbar"
+          className="z-[120] p-1.5 rounded-2xl border-2 border-ink bg-white shadow-chunk max-h-[70vh] overflow-y-auto no-scrollbar"
         >
           <div className="px-3 pt-1.5 pb-2 text-[11px] font-bold uppercase tracking-wider text-ink/50 truncate">{game.name}</div>
-          {orderedRounds.map((r, i) => {
-            const isCur = r.id === game.current_round_id
-            return (
+          {roundsOn && (
+            <>
+              {orderedRounds.map((r, i) => {
+                const isCur = r.id === game.current_round_id
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setRoundMenu(null); if (!isCur) setCurrentRound(r.id) }}
+                    className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm transition ${isCur ? 'bg-candy-yellow' : 'hover:bg-cream'}`}
+                  >
+                    <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white text-xs tabular-nums">{i + 1}</span>
+                    <span className="truncate flex-1">{r.name || `Round ${i + 1}`}</span>
+                    {isCur && <span className="shrink-0 text-xs text-ink/50">current</span>}
+                  </button>
+                )
+              })}
               <button
-                key={r.id}
                 type="button"
                 role="menuitem"
-                onClick={() => { setRoundMenu(null); if (!isCur) setCurrentRound(r.id) }}
-                className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm transition ${isCur ? 'bg-candy-yellow' : 'hover:bg-cream'}`}
+                onClick={() => { setRoundMenu(null); addRound() }}
+                className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm text-ink hover:bg-candy-mint transition"
               >
-                <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white text-xs tabular-nums">{i + 1}</span>
-                <span className="truncate flex-1">{r.name || `Round ${i + 1}`}</span>
-                {isCur && <span className="shrink-0 text-xs text-ink/50">current</span>}
+                <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white text-base leading-none">+</span>
+                Add round
               </button>
-            )
-          })}
-          <div className="my-1 border-t-2 border-dashed border-ink/15" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setRoundMenu(null); addRound() }}
-            className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl font-display font-semibold text-sm text-ink hover:bg-candy-mint transition"
-          >
-            <span className="shrink-0 w-6 h-6 grid place-items-center rounded-lg border-2 border-ink bg-white text-base leading-none">+</span>
-            Add round
-          </button>
+              <div className="my-1 border-t-2 border-dashed border-ink/15" />
+            </>
+          )}
+          {menuLink(`/game/${id}/log`, 'Log', <MenuIcon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />, 'hover:bg-candy-yellow')}
+          {menuLink(`/game/${id}/analytics`, 'Analytics', <MenuIcon d="M3 3v18h18M7 15l4-4 3 3 5-6" />, 'hover:bg-candy-mint')}
+          {menuLink(`/game/${id}/podium`, 'Podium', <MenuIcon d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z" />, 'hover:bg-candy-blue hover:text-white')}
+          {menuLink(`/game/${id}/settings`, 'Settings', <MenuIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />, 'hover:bg-cream')}
         </motion.div>,
         document.body
       )}
@@ -373,6 +401,14 @@ export default function GameScreen() {
         )}
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+function MenuIcon({ d }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
   )
 }
 

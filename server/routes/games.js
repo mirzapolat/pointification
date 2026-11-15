@@ -7,7 +7,7 @@ import { serializeGame, serializeTeam, serializeRound, serializeLog } from '../l
 import { badRequest, forbidden, notFound, wrap, requireString } from '../lib/http.js'
 import { requireAuth, hasGameAccess } from '../lib/auth.js'
 import { publish } from '../lib/events.js'
-import { undoLastPointChange } from '../lib/points.js'
+import { undoLastPointChange, LOG_SELECT } from '../lib/points.js'
 import { saveLogo, deleteLogo, deleteLogoDir, allowedTypes } from '../lib/logos.js'
 
 const router = express.Router()
@@ -210,11 +210,14 @@ router.delete('/:id/permanent', loadGame, requireOwner, wrap(async (req, res) =>
 
 // --- Sharing -------------------------------------------------------------
 
+// POST /api/games/:id/sharing { enabled?, public_log? }
 router.post('/:id/sharing', loadGame, requireOwner, wrap(async (req, res) => {
-  const enabled = !!req.body?.enabled
+  const body = req.body ?? {}
+  const enabled = 'enabled' in body ? !!body.enabled : req.game.is_public === 1
+  const publicLog = 'public_log' in body ? !!body.public_log : req.game.public_log === 1
   const token = enabled && !req.game.public_token ? crypto.randomUUID() : req.game.public_token
-  run('UPDATE games SET is_public = ?, public_token = ?, updated_at = ? WHERE id = ?',
-    enabled ? 1 : 0, token, nowIso(), req.game.id)
+  run('UPDATE games SET is_public = ?, public_token = ?, public_log = ?, updated_at = ? WHERE id = ?',
+    enabled ? 1 : 0, token, publicLog ? 1 : 0, nowIso(), req.game.id)
   emitGame(req.game.id, 'UPDATE')
   res.json({ game: serializeGame(get('SELECT * FROM games WHERE id = ?', req.game.id)) })
 }))
@@ -317,29 +320,57 @@ router.post('/:id/rounds', loadGame, wrap(async (req, res) => {
 
 // --- Point logs ----------------------------------------------------------
 
-// GET /api/games/:id/logs[?round_id=…] — full history, oldest first.
+// GET /api/games/:id/logs[?round_id=…][&include_undone=1] — history, oldest
+// first. Undone changes are left out unless asked for (the audit log wants
+// them; scores, rounds and analytics don't).
 router.get('/:id/logs', loadGame, wrap(async (req, res) => {
   const roundId = req.query.round_id
-  const select = `SELECT l.*, u.email AS user_email
-                    FROM point_logs l LEFT JOIN users u ON u.id = l.user_id
-                   WHERE l.game_id = ?`
+  const undone = req.query.include_undone ? '' : ' AND l.undone_at IS NULL'
   const rows = roundId
-    ? all(`${select} AND l.round_id = ? ORDER BY l.created_at, l.id`, req.game.id, String(roundId))
-    : all(`${select} ORDER BY l.created_at, l.id`, req.game.id)
+    ? all(`${LOG_SELECT}${undone} AND l.round_id = ? ORDER BY l.created_at, l.id`, req.game.id, String(roundId))
+    : all(`${LOG_SELECT}${undone} ORDER BY l.created_at, l.id`, req.game.id)
   res.json({ logs: rows.map(serializeLog) })
 }))
 
 // POST /api/games/:id/undo — reverse the most recent change.
 router.post('/:id/undo', loadGame, wrap(async (req, res) => {
-  const { log, team } = undoLastPointChange(req.game.id)
+  const { log, team } = undoLastPointChange(req.game.id, req.user.id)
   if (log) {
     if (team) publish(req.game.id, { table: 'teams', type: 'UPDATE', row: serializeTeam(team) })
+    // Gone from the live history (scores, analytics); the audit log re-reads.
     publish(req.game.id, { table: 'point_logs', type: 'DELETE', row: null, old: log })
   }
   res.json({ log, team: serializeTeam(team) })
 }))
 
+// --- Notifications (per user, per game) ----------------------------------
+
+// GET /api/games/:id/notifications — this user's setting for this game.
+router.get('/:id/notifications', loadGame, wrap(async (req, res) => {
+  const pref = get('SELECT enabled FROM game_notify_prefs WHERE game_id = ? AND user_id = ?', req.game.id, req.user.id)
+  res.json({
+    global: req.user.notify_points === 1,
+    enabled: pref ? pref.enabled === 1 : true,
+  })
+}))
+
+// PUT /api/games/:id/notifications { enabled }
+router.put('/:id/notifications', loadGame, wrap(async (req, res) => {
+  const enabled = req.body?.enabled ? 1 : 0
+  run(`INSERT INTO game_notify_prefs (game_id, user_id, enabled) VALUES (?, ?, ?)
+       ON CONFLICT(game_id, user_id) DO UPDATE SET enabled = excluded.enabled`,
+    req.game.id, req.user.id, enabled)
+  res.json({ global: req.user.notify_points === 1, enabled: enabled === 1 })
+}))
+
 // --- Collaborators -------------------------------------------------------
+
+const memberView = (r) => ({
+  user_id: r.user_id,
+  created_at: r.created_at,
+  email: r.email,
+  display_name: r.display_name ?? null,
+})
 
 router.get('/:id/members', loadGame, wrap(async (req, res) => {
   const members = all(
@@ -347,16 +378,16 @@ router.get('/:id/members', loadGame, wrap(async (req, res) => {
        FROM game_members m JOIN users u ON u.id = m.user_id
       WHERE m.game_id = ? ORDER BY m.created_at`,
     req.game.id
-  ).map(r => ({
-    user_id: r.user_id,
-    created_at: r.created_at,
-    email: r.email,
-    display_name: r.display_name ?? null,
-  }))
-  res.json({ members })
+  ).map(memberView)
+  const owner = get(
+    'SELECT id AS user_id, email, display_name, created_at FROM users WHERE id = ?',
+    req.game.user_id
+  )
+  res.json({ members, owner: owner ? memberView(owner) : null })
 }))
 
-// POST /api/games/:id/members — invite by email.
+// POST /api/games/:id/members — invite by email. Returns the new member so the
+// owner sees them by name straight away.
 router.post('/:id/members', loadGame, requireOwner, wrap(async (req, res) => {
   const email = requireString(req.body?.email, 'Email').toLowerCase()
   const invitee = get('SELECT id, allow_invites FROM users WHERE email_lower = ?', email)
@@ -364,14 +395,22 @@ router.post('/:id/members', loadGame, requireOwner, wrap(async (req, res) => {
   if (invitee.id === req.game.user_id) throw badRequest('You already own this game.')
   if (!invitee.allow_invites) throw badRequest('This user does not accept game invites.')
 
+  const already = get('SELECT 1 AS ok FROM game_members WHERE game_id = ? AND user_id = ?', req.game.id, invitee.id)
+  if (already) throw badRequest('That person already has access.')
+
   run(
-    `INSERT INTO game_members (game_id, user_id, added_by, created_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(game_id, user_id) DO NOTHING`,
+    'INSERT INTO game_members (game_id, user_id, added_by, created_at) VALUES (?, ?, ?, ?)',
     req.game.id, invitee.id, req.user.id, nowIso()
   )
   publish(req.game.id, { table: 'game_members', type: 'INSERT', row: { game_id: req.game.id, user_id: invitee.id } },
     { userIds: [invitee.id] })
-  res.status(201).json({ ok: true })
+  const member = get(
+    `SELECT m.user_id, m.created_at, u.email, u.display_name
+       FROM game_members m JOIN users u ON u.id = m.user_id
+      WHERE m.game_id = ? AND m.user_id = ?`,
+    req.game.id, invitee.id
+  )
+  res.status(201).json({ member: memberView(member) })
 }))
 
 // DELETE /api/games/:id/members/:userId — owner removes, or a member leaves.

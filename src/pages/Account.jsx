@@ -6,6 +6,7 @@ import * as api from '../lib/api'
 import { useAuth } from '../lib/auth.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
 import { addPasskey, passkeysSupported } from '../lib/passkeys.js'
+import { pushSupport, isSubscribed, subscribeThisDevice, unsubscribeThisDevice } from '../lib/push.js'
 
 export default function Account() {
   const { user, signOut } = useAuth()
@@ -27,20 +28,33 @@ export default function Account() {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full pb-home bg-cream bg-grid"
     >
-      <header className="px-6 md:px-10 py-6 flex items-center justify-between border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
-        <Link to="/" className="btn-chunk bg-white text-sm py-2 px-3">← Games</Link>
-        <h1 className="font-display font-bold text-2xl">Account</h1>
+      <header className="px-safe [--px:1rem] md:[--px:2.5rem] py-3 md:py-5 flex items-center justify-between gap-3 border-b-2 border-ink bg-cream/80 backdrop-blur sticky top-0 z-20">
+        <Link
+          to="/"
+          className="btn-chunk bg-white text-sm h-10 py-0 px-2.5 md:px-3 shrink-0"
+          aria-label="Back to games"
+          title="Back to games"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="md:hidden" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+          <span className="hidden md:inline">← Games</span>
+        </Link>
+        <h1 className="min-w-0 flex-1 text-center font-display font-bold text-lg md:text-2xl truncate leading-none">Account</h1>
         <button
           onClick={handleSignOut}
-          className="btn-chunk bg-white text-sm py-2 px-3 inline-flex items-center gap-2"
+          className="btn-chunk bg-white text-sm h-10 py-0 px-2.5 md:px-3 shrink-0 inline-flex items-center gap-2"
+          aria-label="Sign out"
+          title="Sign out"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign out
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span className="hidden sm:inline">Sign out</span>
         </button>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 md:px-10 py-10 space-y-6">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 md:px-10 py-6 md:py-10 space-y-6">
         <NameCard />
+        <NotificationsCard />
         <EmailCard currentEmail={user?.email} />
         <PasswordCard />
         <PasskeysCard />
@@ -69,7 +83,7 @@ function Section({ title, accent, children }) {
 
 function Banner({ kind, children }) {
   if (!children) return null
-  const bg = kind === 'error' ? 'bg-candy-pink/30' : 'bg-candy-mint/50'
+  const bg = kind === 'error' ? 'bg-candy-pink/30' : kind === 'info' ? 'bg-cream' : 'bg-candy-mint/50'
   return (
     <motion.div
       initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
@@ -157,6 +171,92 @@ function EmailCard({ currentEmail }) {
       <Banner kind="error">{err}</Banner>
       <Banner kind="ok">{msg}</Banner>
     </Section>
+  )
+}
+
+function NotificationsCard() {
+  const { user, refresh } = useAuth()
+  const support = pushSupport()
+  const [on, setOn] = useState(!!user?.notify_points)
+  const [device, setDevice] = useState(null) // this browser subscribed? null = checking
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => { setOn(!!user?.notify_points) }, [user?.notify_points])
+  useEffect(() => { isSubscribed().then(setDevice) }, [])
+
+  const enableDevice = async () => {
+    const { error } = await subscribeThisDevice()
+    if (error) { setErr(error); return false }
+    setDevice(true)
+    return true
+  }
+
+  const toggle = async () => {
+    if (busy) return
+    setBusy(true); setErr(null)
+    const next = !on
+    if (next && !(await enableDevice())) { setBusy(false); return }
+    if (!next) await unsubscribeThisDevice().then(() => setDevice(false)).catch(() => {})
+    const { error } = await api.updateAccount({ notify_points: next })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setOn(next)
+    await refresh()
+  }
+
+  const addDevice = async () => {
+    setBusy(true); setErr(null)
+    await enableDevice()
+    setBusy(false)
+  }
+
+  return (
+    <Section title="Notifications" accent="#FF4FA3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <label className="block text-sm font-semibold">Notify me when points change</label>
+          <p className="text-xs text-ink/60 mt-0.5">
+            For all your games. Mute single games in their settings.
+          </p>
+        </div>
+        <SwitchButton on={on} onClick={toggle} disabled={busy || support !== 'ok'} />
+      </div>
+      {support === 'needs-install' && (
+        <Banner kind="info">On iPhone and iPad, add Pointification to your Home Screen first, then turn this on from the installed app.</Banner>
+      )}
+      {support === 'unsupported' && (
+        <Banner kind="info">This browser doesn't support notifications.</Banner>
+      )}
+      {support === 'ok' && on && device === false && (
+        <div className="mt-3 flex items-center justify-between gap-3 px-3 py-2 rounded-xl border-2 border-ink bg-cream text-sm">
+          <span>Not turned on for this device yet.</span>
+          <button type="button" onClick={addDevice} disabled={busy} className="btn-chunk bg-candy-mint text-sm py-1.5 px-3 shrink-0 disabled:opacity-60">
+            Enable here
+          </button>
+        </div>
+      )}
+      <Banner kind="error">{err}</Banner>
+    </Section>
+  )
+}
+
+function SwitchButton({ on, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      className={`relative w-14 h-8 rounded-full border-2 border-ink transition-colors disabled:opacity-60 shrink-0 ${on ? 'bg-candy-mint' : 'bg-white'}`}
+    >
+      <motion.span
+        layout
+        transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+        className="absolute top-0.5 w-6 h-6 rounded-full bg-ink"
+        style={{ left: on ? 'calc(100% - 26px)' : '2px' }}
+      />
+    </button>
   )
 }
 

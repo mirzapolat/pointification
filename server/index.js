@@ -193,7 +193,7 @@ app.use(express.static(DIST_DIR, {
 }))
 
 // --- App routes and real 404 responses ------------------------------------
-const appRoute = /^\/(?:login|verify|welcome|onboarding|account|game\/[^/]+(?:\/(?:settings|log|podium))?)\/?$/
+const appRoute = /^\/(?:login|verify|welcome|onboarding|account|p\/[^/]+\/log|game\/[^/]+(?:\/(?:settings|log|analytics|podium))?)\/?$/
 app.get('*', async (req, res) => {
   try {
     res.setHeader('content-type', 'text/html; charset=utf-8')

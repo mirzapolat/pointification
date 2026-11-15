@@ -27,6 +27,10 @@ function ensureColumn(table, column, definition) {
   }
 }
 ensureColumn('games', 'deleted_at', 'TEXT')
+ensureColumn('games', 'public_log', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('users', 'notify_points', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('point_logs', 'undone_at', 'TEXT')
+ensureColumn('point_logs', 'undone_by', 'TEXT REFERENCES users(id) ON DELETE SET NULL')
 
 /** Run `fn` inside a transaction, rolling back if it throws. */
 export function tx(fn) {

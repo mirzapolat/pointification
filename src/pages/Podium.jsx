@@ -160,7 +160,7 @@ export default function Podium() {
       >
         <div className="flex items-center gap-4 md:gap-6 min-w-0">
           <button
-            onClick={() => nav(`/game/${id}/log`)}
+            onClick={() => nav(`/game/${id}/analytics`)}
             className="btn-chunk bg-white text-sm py-2 px-3"
             aria-label="Exit podium"
             title="Exit podium"

@@ -10,10 +10,13 @@ import GameSettings from './pages/GameSettings.jsx'
 import Account from './pages/Account.jsx'
 import PublicGame from './pages/PublicGame.jsx'
 import GameLog from './pages/GameLog.jsx'
+import GameAnalytics from './pages/GameAnalytics.jsx'
+import PublicLog from './pages/PublicLog.jsx'
 import Podium from './pages/Podium.jsx'
 import Imprint from './pages/Imprint.jsx'
 import Privacy from './pages/Privacy.jsx'
 import Landing from './pages/Landing.jsx'
+import SetName from './pages/SetName.jsx'
 import PageMetadata from './components/PageMetadata.jsx'
 import { DialogProvider } from './components/Dialogs.jsx'
 import { UpdateToast } from './components/InstallApp.jsx'
@@ -24,6 +27,7 @@ function needsWelcome(details) {
 function needsOnboarding(details) {
   return !details || !details.onboarding_completed_at
 }
+const needsName = (user) => !user?.display_name?.trim()
 
 function Protected({ children, allow = 'app' }) {
   const { user, loading, mfaRequired, details, detailsLoading } = useAuth()
@@ -32,6 +36,7 @@ function Protected({ children, allow = 'app' }) {
   if (!user) return <Navigate to="/login" replace />
   if (mfaRequired) return <Navigate to="/login" replace state={{ from: loc.pathname }} />
   if (detailsLoading && !details) return <Splash />
+  if (needsName(user)) return <SetName />
 
   // Gate: force the new user through welcome → onboarding before reaching the app.
   if (allow === 'app') {
@@ -52,6 +57,7 @@ function Home() {
   if (loading || !user) return <Landing />
   if (mfaRequired) return <Navigate to="/login" replace />
   if (detailsLoading && !details) return <Splash />
+  if (needsName(user)) return <SetName />
   if (needsWelcome(details)) return <Navigate to="/welcome" replace />
   if (needsOnboarding(details)) return <Navigate to="/onboarding" replace />
   return <GameList />
@@ -78,12 +84,14 @@ export default function App() {
         <Route path="/imprint" element={<Imprint />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/p/:token" element={<PublicGame />} />
+        <Route path="/p/:token/log" element={<PublicLog />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/" element={<Home />} />
         <Route path="/game/new" element={<Protected><GameSettings /></Protected>} />
         <Route path="/game/:id/settings" element={<Protected><GameSettings /></Protected>} />
         <Route path="/game/:id" element={<Protected><GameScreen /></Protected>} />
         <Route path="/game/:id/log" element={<Protected><GameLog /></Protected>} />
+        <Route path="/game/:id/analytics" element={<Protected><GameAnalytics /></Protected>} />
         <Route path="/game/:id/podium" element={<Protected><Podium /></Protected>} />
         <Route path="/account" element={<Protected><Account /></Protected>} />
         <Route path="*" element={

@@ -11,7 +11,7 @@
 //   icons, fonts, /logos/*  stale-while-revalidate
 //   /api/*, non-GET         untouched
 
-const VERSION = 'v2'
+const VERSION = 'v3'
 const SHELL_CACHE = `pf-shell-${VERSION}`
 const PAGE_CACHE = `pf-pages-${VERSION}`
 const ASSET_CACHE = `pf-assets-${VERSION}`
@@ -129,3 +129,38 @@ async function trim(cache, maxEntries) {
   const keys = await cache.keys()
   for (let i = 0; i < keys.length - maxEntries; i++) await cache.delete(keys[i])
 }
+
+// --- Push notifications ------------------------------------------------------
+// The server sends { title, body, url, tag } when points change in a game the
+// user follows (see server/lib/push.js).
+
+self.addEventListener('push', (event) => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data?.text() } }
+  const title = data.title || 'Pointification'
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || 'Scores changed.',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: data.tag,
+    renotify: !!data.tag,
+    data: { url: data.url || '/' },
+  }))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = new URL(event.notification.data?.url || '/', self.location.origin).href
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of windows) {
+      if (client.url === target && 'focus' in client) return client.focus()
+    }
+    const any = windows.find((c) => 'navigate' in c)
+    if (any) {
+      await any.navigate(target).catch(() => {})
+      return any.focus()
+    }
+    return self.clients.openWindow(target)
+  })())
+})

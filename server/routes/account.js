@@ -8,6 +8,8 @@ import { hashPassword, verifyPassword, requireAuth, destroyUserSessions, clearSe
 import { deleteLogoDir } from '../lib/logos.js'
 import { listPasskeys, registrationOptions, registerPasskey, deletePasskey } from '../lib/passkeys.js'
 import { notFound } from '../lib/http.js'
+import { vapidPublicKey, isAllowedPushEndpoint } from '../lib/push.js'
+import crypto from 'node:crypto'
 
 const router = express.Router()
 router.use(requireAuth)
@@ -17,19 +19,53 @@ const looksLikeEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 
 const touch = (id) => run('UPDATE users SET updated_at = ? WHERE id = ?', nowIso(), id)
 
-// PATCH /api/account — display name and invite preference.
+// PATCH /api/account — display name, invite and notification preferences.
 router.patch('/', wrap(async (req, res) => {
-  const { display_name, allow_invites } = req.body ?? {}
+  const { display_name, allow_invites, notify_points } = req.body ?? {}
   if (display_name !== undefined) {
     const next = String(display_name ?? '').trim()
     if (!next) throw badRequest("Name can't be empty.")
+    if (next.length > 60) throw badRequest('Name must be 60 characters or fewer.')
     run('UPDATE users SET display_name = ? WHERE id = ?', next, req.user.id)
   }
   if (allow_invites !== undefined) {
     run('UPDATE users SET allow_invites = ? WHERE id = ?', allow_invites ? 1 : 0, req.user.id)
   }
+  if (notify_points !== undefined) {
+    run('UPDATE users SET notify_points = ? WHERE id = ?', notify_points ? 1 : 0, req.user.id)
+  }
   touch(req.user.id)
   res.json({ user: serializeUser(get('SELECT * FROM users WHERE id = ?', req.user.id)) })
+}))
+
+// --- Push notifications ----------------------------------------------------
+
+// GET /api/account/push — the server's VAPID key, for pushManager.subscribe().
+router.get('/push', (req, res) => {
+  res.json({ public_key: vapidPublicKey, notify_points: req.user.notify_points === 1 })
+})
+
+// POST /api/account/push { subscription } — register this device.
+router.post('/push', wrap(async (req, res) => {
+  const sub = req.body?.subscription
+  const endpoint = String(sub?.endpoint ?? '')
+  const p256dh = String(sub?.keys?.p256dh ?? '')
+  const auth = String(sub?.keys?.auth ?? '')
+  if (!isAllowedPushEndpoint(endpoint) || !p256dh || !auth) throw badRequest('Invalid push subscription.')
+  if (endpoint.length > 1024 || p256dh.length > 256 || auth.length > 64) throw badRequest('Invalid push subscription.')
+  // An endpoint belongs to one browser; re-point it if another account had it.
+  run(`INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+    crypto.randomUUID(), req.user.id, endpoint, p256dh, auth, nowIso())
+  res.status(201).json({ ok: true })
+}))
+
+// POST /api/account/push/remove { endpoint } — forget this device.
+router.post('/push/remove', wrap(async (req, res) => {
+  run('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?',
+    String(req.body?.endpoint ?? ''), req.user.id)
+  res.json({ ok: true })
 }))
 
 // POST /api/account/email

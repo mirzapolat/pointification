@@ -50,6 +50,94 @@ export function InstallButton({ className = '' }) {
   )
 }
 
+const DISMISS_KEY = 'pf-install-dismissed'
+const DISMISS_DAYS = 30
+
+function recentlyDismissed() {
+  try {
+    const at = Number(localStorage.getItem(DISMISS_KEY))
+    return Number.isFinite(at) && at > 0 && Date.now() - at < DISMISS_DAYS * 86400_000
+  } catch { return false }
+}
+
+/**
+ * Floating, dismissible "install the app" card at the bottom of the screen.
+ * Replaces the header button on phones, where the header had no room for it.
+ * Dismissing hides it for a month on this device.
+ */
+export function InstallPrompt({ className = '' }) {
+  const { installEvent, installed, updateReady } = usePwa()
+  const [ios, setIos] = useState(false)
+  const [help, setHelp] = useState(false)
+  const [dismissed, setDismissed] = useState(true) // until we've read storage
+  useEffect(() => {
+    setIos(isIosSafari())
+    setDismissed(recentlyDismissed())
+  }, [])
+
+  // The update toast uses the same spot; let it win.
+  const visible = !installed && !dismissed && !updateReady && (installEvent || ios)
+
+  const dismiss = () => {
+    setDismissed(true)
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now())) } catch { /* private mode */ }
+    track('pwa-install-dismiss')
+  }
+
+  const install = async () => {
+    if (installEvent) {
+      const outcome = await promptInstall()
+      track('pwa-install', { outcome, from: 'prompt' })
+    } else {
+      setHelp(true)
+    }
+  }
+
+  if (typeof document === 'undefined') return null
+  return (
+    <>
+      {createPortal(
+        <AnimatePresence>
+          {visible && (
+            <motion.div
+              role="complementary"
+              aria-label="Install the app"
+              className={`fixed z-[65] inset-x-0 bottom-safe px-safe [--px:0.75rem] flex justify-center pointer-events-none ${className}`}
+              initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 24, delay: 0.6 }}
+            >
+              <div className="card-chunk pointer-events-auto w-full max-w-md flex items-center gap-3 p-3 pl-3.5 rounded-[1.75rem]">
+                <img src="/icons/icon-192.png" alt="" className="w-11 h-11 shrink-0 rounded-xl" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-display font-bold text-sm leading-tight">Get the app</div>
+                  <div className="text-xs text-ink/60 leading-snug">Full screen, faster, with score notifications.</div>
+                </div>
+                <button type="button" onClick={install} className="btn-chunk bg-candy-yellow text-sm h-9 py-0 px-3 shrink-0 shadow-chunk-sm">
+                  <InstallIcon />
+                  Install
+                </button>
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  aria-label="Dismiss"
+                  title="Dismiss"
+                  className="w-8 h-8 shrink-0 -mr-0.5 grid place-items-center rounded-full text-ink/60 hover:text-ink hover:bg-cream transition"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+      <IosInstallSheet open={help} onClose={() => setHelp(false)} />
+    </>
+  )
+}
+
 function IosInstallSheet({ open, onClose }) {
   const closeRef = useRef(null)
   useEffect(() => {

@@ -104,6 +104,13 @@ export const saveUserDetails = (patch) =>
 
 export const deleteAccount = () => request('/account', { method: 'DELETE' })
 
+// Push notifications (see lib/push.js for the browser side).
+export const getPushConfig = () => request('/account/push')
+export const savePushSubscription = (subscription) =>
+  request('/account/push', { method: 'POST', body: { subscription } })
+export const removePushSubscription = (endpoint) =>
+  request('/account/push/remove', { method: 'POST', body: { endpoint } })
+
 // --- Games ---------------------------------------------------------------
 
 export const listGames = () => pick(request('/games'), 'games')
@@ -122,6 +129,13 @@ export const deleteGameForever = (id) => request(`/games/${id}/permanent`, { met
 
 export const setGameSharing = (id, enabled) =>
   pick(request(`/games/${id}/sharing`, { method: 'POST', body: { enabled } }), 'game')
+
+export const setPublicLog = (id, enabled) =>
+  pick(request(`/games/${id}/sharing`, { method: 'POST', body: { public_log: enabled } }), 'game')
+
+export const getGameNotifications = (id) => request(`/games/${id}/notifications`)
+export const setGameNotifications = (id, enabled) =>
+  request(`/games/${id}/notifications`, { method: 'PUT', body: { enabled } })
 
 export const rotateGameToken = (id) =>
   pick(request(`/games/${id}/rotate-token`, { method: 'POST' }), 'game')
@@ -174,14 +188,18 @@ export const deleteRound = (id) => request(`/rounds/${id}`, { method: 'DELETE' }
 export const listLogs = (gameId, roundId) =>
   pick(request(`/games/${gameId}/logs${roundId ? `?round_id=${encodeURIComponent(roundId)}` : ''}`), 'logs')
 
+/** Every change including undone ones — the audit log. */
+export const listAuditLog = (gameId) => pick(request(`/games/${gameId}/logs?include_undone=1`), 'logs')
+
 export const undoLastPointChange = (gameId) => request(`/games/${gameId}/undo`, { method: 'POST' })
 
 // --- Collaborators -------------------------------------------------------
 
-export const listMembers = (gameId) => pick(request(`/games/${gameId}/members`), 'members')
+/** `{ members, owner }` */
+export const listMembers = (gameId) => request(`/games/${gameId}/members`)
 
 export const inviteMember = (gameId, email) =>
-  request(`/games/${gameId}/members`, { method: 'POST', body: { email } })
+  pick(request(`/games/${gameId}/members`, { method: 'POST', body: { email } }), 'member')
 
 export const removeMember = (gameId, userId) =>
   request(`/games/${gameId}/members/${userId}`, { method: 'DELETE' })
@@ -189,6 +207,7 @@ export const removeMember = (gameId, userId) =>
 // --- Public share links --------------------------------------------------
 
 export const getPublicGame = (token) => request(`/public/${encodeURIComponent(token)}`)
+export const getPublicLog = (token) => request(`/public/${encodeURIComponent(token)}/log`)
 
 // --- Uploaded files ------------------------------------------------------
 

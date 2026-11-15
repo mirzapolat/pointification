@@ -6,6 +6,7 @@ import { badRequest, forbidden, notFound, wrap, requireString } from '../lib/htt
 import { requireAuth, hasGameAccess } from '../lib/auth.js'
 import { publish } from '../lib/events.js'
 import { applyPointChange } from '../lib/points.js'
+import { notifyPointChange } from '../lib/push.js'
 
 const router = express.Router()
 router.use(requireAuth)
@@ -59,10 +60,12 @@ router.post('/:id/points', loadTeam, wrap(async (req, res) => {
 
   const { log, team } = applyPointChange({
     teamId: req.team.id, delta, userId: req.user.id, userEmail: req.user.email,
+    userName: req.user.display_name ?? null,
   })
   if (log) {
     publish(req.team.game_id, { table: 'teams', type: 'UPDATE', row: serializeTeam(team) })
     publish(req.team.game_id, { table: 'point_logs', type: 'INSERT', row: log })
+    notifyPointChange({ log, team, actor: req.user })
   }
   res.json({ log, team: serializeTeam(team) })
 }))

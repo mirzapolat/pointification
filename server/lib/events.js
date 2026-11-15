@@ -5,16 +5,12 @@
 // Single-process by design — the app runs as one container. If it ever needs to
 // scale horizontally, this is the one module that has to grow a shared bus.
 import { hasGameAccess } from './auth.js'
+import { PUBLIC_GAME_FIELDS } from './serialize.js'
 
 /** @type {Set<{res: import('express').Response, kind: string, gameId: string|null, userId: string|null}>} */
 const clients = new Set()
 
-// Anonymous viewers of a shared game only ever need the presentation fields.
-const PUBLIC_GAME_FIELDS = [
-  'id', 'name', 'is_public', 'public_token',
-  'logo_path', 'logo_placement', 'logo_shape', 'logo_scale', 'team_sort',
-]
-
+// Anonymous viewers of a shared game only ever get PUBLIC_GAME_FIELDS.
 function projectForPublic(payload) {
   if (payload.table !== 'games') return payload
   if (!payload.row) return payload

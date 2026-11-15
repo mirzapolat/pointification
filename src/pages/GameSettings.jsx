@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react'
@@ -419,7 +419,7 @@ function SettingsForm({ initial, user, nav }) {
       <header className="shrink-0 px-safe [--px:1rem] md:[--px:2rem] py-3 md:py-4 flex items-center justify-between gap-3 bg-cream/80 backdrop-blur border-b-2 border-ink z-20">
         <button
           onClick={close}
-          className="btn-chunk bg-white text-sm py-2 p-2 md:px-3"
+          className="btn-chunk bg-white text-sm h-10 py-0 px-2.5 md:px-3 shrink-0"
           aria-label={isEdit ? 'Back' : 'Cancel'}
           title={isEdit ? 'Back' : 'Cancel'}
         >
@@ -429,16 +429,19 @@ function SettingsForm({ initial, user, nav }) {
           <span className="hidden md:inline">{isEdit ? 'Back' : 'Cancel'}</span>
         </button>
         <div className="min-w-0 text-center flex-1">
-          <h1 className="font-display font-bold text-lg md:text-2xl truncate leading-none">
+          {isEdit && (
+            <div className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-ink/50 leading-none mb-1">Settings</div>
+          )}
+          <h1 className="font-display font-bold text-base md:text-2xl truncate leading-tight">
             {isEdit ? (name || 'Settings') : 'New game'}
           </h1>
         </div>
         {isEdit ? (
-          <button onClick={close} className="btn-chunk bg-candy-mint text-sm py-2 px-3 md:px-4">
+          <button onClick={close} className="btn-chunk bg-candy-mint text-sm h-10 py-0 px-3 md:px-4 shrink-0">
             Done
           </button>
         ) : (
-          <button onClick={create} disabled={busy} className="btn-chunk bg-candy-mint text-sm py-2 px-3 md:px-4 disabled:opacity-60">
+          <button onClick={create} disabled={busy} className="btn-chunk bg-candy-mint text-sm h-10 py-0 px-3 md:px-4 shrink-0 disabled:opacity-60">
             {busy ? 'Creating…' : 'Create'}
           </button>
         )}
@@ -481,6 +484,8 @@ function SettingsForm({ initial, user, nav }) {
                 placeholder="Friday Quiz Night"
                 autoFocus={!isEdit}
               />
+
+              {isEdit && <NotifySection gameId={initial.id} />}
 
               {isOwner && (
                 <div className="mt-6">
@@ -671,7 +676,7 @@ function SettingsForm({ initial, user, nav }) {
 
           {tab === 'sharing' && isEdit && isOwner && (
             <div>
-              <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} />
+              <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} initialPublicLog={initial.public_log} />
               <MembersSection gameId={initial.id} />
             </div>
           )}
@@ -996,8 +1001,9 @@ function MenuPreview() {
   )
 }
 
-function SharingSection({ gameId, initialIsPublic, initialToken }) {
+function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLog }) {
   const [isPublic, setIsPublic] = useState(!!initialIsPublic)
+  const [publicLog, setPublicLogState] = useState(!!initialPublicLog)
   const [token, setToken] = useState(initialToken ?? null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -1013,6 +1019,14 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
     setIsPublic(data.is_public)
     setToken(data.public_token)
     if (data.is_public) track('public-link')
+  }
+
+  const togglePublicLog = async () => {
+    setErr(null); setBusy(true)
+    const { data, error } = await api.setPublicLog(gameId, !publicLog)
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setPublicLogState(!!data.public_log)
   }
 
   const dialogs = useDialogs()
@@ -1092,6 +1106,13 @@ function SharingSection({ gameId, initialIsPublic, initialToken }) {
                   </button>
                 </div>
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-4 mt-3 mr-2 mb-2 p-3 rounded-2xl border-2 border-ink bg-white">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">Show the log on the public link</div>
+                <p className="text-xs text-ink/60 mt-0.5">Viewers can see who changed which points and when. Names only, never emails.</p>
+              </div>
+              <Toggle on={publicLog} onClick={togglePublicLog} />
             </div>
           </motion.div>
         )}
@@ -1267,8 +1288,50 @@ function ExpandIcon() {
   )
 }
 
+// Your own notification preference for this game. Personal: collaborators
+// each have their own, and it only matters while the account-wide switch is on.
+function NotifySection({ gameId }) {
+  const [state, setState] = useState(null) // { global, enabled }
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    api.getGameNotifications(gameId).then(({ data }) => setState(data ?? null))
+  }, [gameId])
+
+  if (!state) return null
+
+  const toggle = async () => {
+    setBusy(true); setErr(null)
+    const { data, error } = await api.setGameNotifications(gameId, !state.enabled)
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setState(data)
+  }
+
+  return (
+    <div className="mt-6 p-4 rounded-2xl border-2 border-ink bg-white">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">Notify me about this game</div>
+          <p className="text-xs text-ink/60 mt-0.5">
+            {state.global
+              ? 'Get a notification when someone else changes points here. Only affects you.'
+              : <>Notifications are off for your account. Turn them on in <Link to="/account" className="underline font-semibold">Account</Link> first.</>}
+          </p>
+        </div>
+        <div className={busy || !state.global ? 'opacity-50 pointer-events-none' : ''}>
+          <Toggle on={state.global && state.enabled} onClick={toggle} />
+        </div>
+      </div>
+      {err && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{err}</div>}
+    </div>
+  )
+}
+
 function MembersSection({ gameId }) {
   const [members, setMembers] = useState([])
+  const [owner, setOwner] = useState(null)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -1276,7 +1339,8 @@ function MembersSection({ gameId }) {
 
   const load = async () => {
     const { data } = await api.listMembers(gameId)
-    setMembers(data ?? [])
+    setMembers(data?.members ?? [])
+    setOwner(data?.owner ?? null)
   }
 
   useEffect(() => {
@@ -1287,10 +1351,14 @@ function MembersSection({ gameId }) {
   const invite = async (e) => {
     e.preventDefault()
     setErr(null); setMsg(null); setBusy(true)
-    const { error } = await api.inviteMember(gameId, email.trim())
+    const { data: member, error } = await api.inviteMember(gameId, email.trim())
     setBusy(false)
-    if (error) setErr(error.message)
-    else { track('invite-sent'); setMsg(`${email} can now see and edit this game.`); setEmail('') }
+    if (error) return setErr(error.message)
+    track('invite-sent')
+    // Show them right away, by name; the realtime reload confirms it.
+    if (member) setMembers(ms => ms.some(m => m.user_id === member.user_id) ? ms : [...ms, member])
+    setMsg(`${member?.display_name || email} can now keep score and edit this game.`)
+    setEmail('')
   }
 
   const dialogs = useDialogs()
@@ -1304,71 +1372,88 @@ function MembersSection({ gameId }) {
     if (!ok) return
     const { error } = await api.removeMember(gameId, userId)
     if (error) setErr(error.message)
+    else setMembers(ms => ms.filter(m => m.user_id !== userId))
   }
 
   return (
     <div className="mt-6 pt-6 border-t-2 border-dashed border-ink/20">
-      <label className="block text-sm font-semibold mb-2">People you've invited</label>
+      <label className="block text-sm font-semibold">People with access</label>
+      <p className="text-xs text-ink/60 mb-3">
+        Collaborators can add and undo points, manage teams and rounds, and change scoring settings.
+        Only you can share the game, invite people or delete it.
+      </p>
 
       <div className="space-y-2 mb-3">
-        {members.length === 0 ? (
+        {owner && <PersonRow person={owner} role="Owner" roleClass="bg-candy-yellow" />}
+        <AnimatePresence initial={false}>
+          {members.map(m => (
+            <PersonRow
+              key={m.user_id}
+              person={m}
+              role="Collaborator"
+              roleClass="bg-candy-mint"
+              onRemove={() => remove(m.user_id, m.display_name || m.email)}
+            />
+          ))}
+        </AnimatePresence>
+        {members.length === 0 && (
           <div className="px-3 py-3 rounded-2xl border-2 border-dashed border-ink/20 text-sm text-ink/60 text-center">
-            You haven't invited anyone yet.
+            Nobody else yet. Invite someone to keep score with you.
           </div>
-        ) : (
-          <AnimatePresence initial={false}>
-            {members.map(m => {
-              const name = m.display_name?.trim()
-              const email = m.email
-              const since = m.created_at
-                ? new Date(m.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-                : null
-              const primary = name || email || '…'
-              const initial = (name || email || '?')[0]?.toUpperCase()
-              return (
-                <motion.div
-                  key={m.user_id}
-                  layout
-                  initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
-                  className="flex items-center gap-2 p-2 rounded-2xl border-2 border-ink bg-white"
-                >
-                  <div className="w-9 h-9 rounded-xl border-2 border-ink bg-candy-mint grid place-items-center font-bold">
-                    {initial}
-                  </div>
-                  <div className="flex-1 truncate">
-                    <div className="font-semibold truncate">{primary}</div>
-                    <div className="text-xs text-ink/60 truncate">
-                      {name && email ? `${email} · ` : ''}
-                      <span className="text-emerald-700 font-semibold">Has access</span>
-                      {since ? ` since ${since}` : ''}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => remove(m.user_id, primary)}
-                    className="px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
-                  >Remove</button>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
         )}
       </div>
 
-      <form onSubmit={invite} className="flex gap-2">
+      <form onSubmit={invite} className="flex flex-col sm:flex-row gap-2">
         <input
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          placeholder="invite by email (must have an account)"
+          placeholder="Their account email"
           className="input-chunk flex-1"
         />
         <button disabled={busy || !email} className="btn-chunk bg-candy-pink text-white disabled:opacity-60">
-          Invite
+          {busy ? 'Inviting…' : 'Invite'}
         </button>
       </form>
+      <p className="text-xs text-ink/50 mt-1.5">They need a Pointification account. The game shows up in their list straight away.</p>
       {err && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-pink/30 text-sm">{err}</div>}
       {msg && <div className="mt-2 px-3 py-2 rounded-xl border-2 border-ink bg-candy-mint/50 text-sm">{msg}</div>}
     </div>
+  )
+}
+
+function PersonRow({ person, role, roleClass, onRemove }) {
+  const name = person.display_name?.trim()
+  const initial = (name || person.email || '?')[0]?.toUpperCase()
+  const since = role !== 'Owner' && person.created_at
+    ? new Date(person.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : null
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 8 }}
+      className="flex items-center gap-3 p-2 pr-2.5 rounded-2xl border-2 border-ink bg-white"
+    >
+      <div className={`w-10 h-10 shrink-0 rounded-xl border-2 border-ink grid place-items-center font-display font-bold ${roleClass}`}>
+        {initial}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-semibold truncate">{name || 'No name yet'}</span>
+          <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border-2 border-ink ${roleClass}`}>{role}</span>
+        </div>
+        <div className="text-xs text-ink/60 truncate">
+          {person.email}{since ? ` · since ${since}` : ''}
+        </div>
+      </div>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="shrink-0 px-3 py-1.5 rounded-xl border-2 border-ink bg-white hover:bg-candy-pink hover:text-white text-sm font-semibold transition"
+        >Remove</button>
+      )}
+    </motion.div>
   )
 }
 

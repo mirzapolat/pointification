@@ -77,6 +77,8 @@ router.post('/signup', wrap(async (req, res) => {
   const displayName = String(req.body?.display_name ?? '').trim() || null
 
   if (!looksLikeEmail(email)) throw badRequest('Enter a valid email address.')
+  if (!displayName) throw badRequest('Tell us your name.')
+  if (displayName.length > 60) throw badRequest('Name must be 60 characters or fewer.')
   if (password.length < 6) throw badRequest('Password must be at least 6 characters.')
   if (get('SELECT 1 AS ok FROM users WHERE email_lower = ?', email)) {
     throw badRequest('An account with that email already exists.')

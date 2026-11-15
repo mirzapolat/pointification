@@ -4,7 +4,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as api from '../lib/api'
 import { logoUrl } from '../lib/api'
-import { InstallButton } from '../components/InstallApp.jsx'
+import { InstallButton, InstallPrompt } from '../components/InstallApp.jsx'
 import { subscribeToGames } from '../lib/realtime'
 import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
@@ -297,7 +297,6 @@ function Sidebar({ filter, onChange, user }) {
       <div className="md:hidden flex items-center justify-between gap-3">
         <Brand size="sm" />
         <div className="flex items-center gap-2 shrink-0">
-          <InstallButton />
           <SupportMenu variant="icon" />
           <Link
             to="/account"
@@ -379,6 +378,8 @@ function Sidebar({ filter, onChange, user }) {
           className="flex flex-col gap-3"
         >
           <InstallButton className="w-full justify-center" />
+          {/* Phones get the floating card instead; the sidebar only shows from md up. */}
+          <InstallPrompt className="md:hidden" />
           <div className="card-chunk p-2 grid grid-cols-2 gap-1">
             <SupportMenu variant="row" />
             <SidebarTile
@@ -700,7 +701,8 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
           {menu.type === 'show' ? (
             <>
               <MenuLink to={`/game/${game.id}`} hover="hover:bg-candy-yellow" icon={<PlayIcon />} label="Open Game" onSelect={() => setMenu(null)} />
-              <MenuLink to={`/game/${game.id}/log`} hover="hover:bg-candy-mint" icon={<ChartIcon />} label="Analysis" onSelect={() => setMenu(null)} />
+              <MenuLink to={`/game/${game.id}/log`} hover="hover:bg-candy-yellow" icon={<LogIcon />} label="Log" onSelect={() => setMenu(null)} />
+              <MenuLink to={`/game/${game.id}/analytics`} hover="hover:bg-candy-mint" icon={<ChartIcon />} label="Analytics" onSelect={() => setMenu(null)} />
               <MenuLink to={`/game/${game.id}/podium`} hover="hover:bg-candy-blue hover:text-white" icon={<PodiumIcon />} label="Podium" onSelect={() => setMenu(null)} />
             </>
           ) : (
@@ -841,6 +843,15 @@ function PlayIcon() {
     </svg>
   )
 }
+function LogIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+    </svg>
+  )
+}
+
 function ChartIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

@@ -6,6 +6,14 @@ import { get, run, tx, nowIso } from '../db.js'
 import { serializeLog } from './serialize.js'
 import { notFound } from './http.js'
 
+/** Log rows joined with who made (and who undid) each change. Append filters. */
+export const LOG_SELECT = `SELECT l.*, u.email AS user_email, u.display_name AS user_name,
+                                  ub.display_name AS undone_by_name
+                             FROM point_logs l
+                             LEFT JOIN users u  ON u.id  = l.user_id
+                             LEFT JOIN users ub ON ub.id = l.undone_by
+                            WHERE l.game_id = ?`
+
 /**
  * Adds `delta` to a team's score and records a log entry.
  * When the game disallows negatives the delta is clamped so the score floors
@@ -13,7 +21,7 @@ import { notFound } from './http.js'
  *
  * @returns {{log: object|null, team: object}} the new log (null on no-op)
  */
-export function applyPointChange({ teamId, delta, userId, userEmail = null }) {
+export function applyPointChange({ teamId, delta, userId, userEmail = null, userName = null }) {
   return tx(() => {
     const row = get(
       `SELECT t.id, t.game_id, t.score, g.allow_negative, g.rounds_enabled, g.current_round_id
@@ -48,18 +56,18 @@ export function applyPointChange({ teamId, delta, userId, userEmail = null }) {
       log.id, log.team_id, log.game_id, log.user_id, log.round_id, log.delta, log.new_score, log.created_at
     )
     return {
-      log: serializeLog({ ...log, user_email: userEmail }),
+      log: serializeLog({ ...log, user_email: userEmail, user_name: userName }),
       team: get('SELECT * FROM teams WHERE id = ?', teamId),
     }
   })
 }
 
 /**
- * Reverses the newest logged change for a game and deletes its log row, so
- * repeated calls walk history back. Scoped to the active round when rounds are
+ * Reverses the newest logged change for a game and marks its log row as
+ * undone (kept for the audit log), so repeated calls walk history back. Scoped to the active round when rounds are
  * on. Returns nulls when there is nothing to undo.
  */
-export function undoLastPointChange(gameId) {
+export function undoLastPointChange(gameId, userId = null) {
   return tx(() => {
     const game = get('SELECT rounds_enabled, current_round_id FROM games WHERE id = ?', gameId)
     if (!game) throw notFound('Game not found.')
@@ -67,12 +75,12 @@ export function undoLastPointChange(gameId) {
     const log = game.rounds_enabled
       ? get(
           `SELECT * FROM point_logs
-            WHERE game_id = ? AND round_id IS ?
+            WHERE game_id = ? AND round_id IS ? AND undone_at IS NULL
             ORDER BY created_at DESC, id DESC LIMIT 1`,
           gameId, game.current_round_id ?? null
         )
       : get(
-          'SELECT * FROM point_logs WHERE game_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+          'SELECT * FROM point_logs WHERE game_id = ? AND undone_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 1',
           gameId
         )
     if (!log) return { log: null, team: null }
@@ -86,7 +94,7 @@ export function undoLastPointChange(gameId) {
       if (!team.allow_negative && newScore < 0) newScore = 0
       run('UPDATE teams SET score = ? WHERE id = ?', newScore, team.id)
     }
-    run('DELETE FROM point_logs WHERE id = ?', log.id)
+    run('UPDATE point_logs SET undone_at = ?, undone_by = ? WHERE id = ?', nowIso(), userId, log.id)
 
     return {
       log: serializeLog(log),
