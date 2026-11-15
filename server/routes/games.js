@@ -136,6 +136,12 @@ const GAME_PATCH = {
   },
   point_presets: parsePresets,
   logo_path: (v) => (v ? String(v) : null),
+  // null = automatic (picked from the palette by list position).
+  cover_color: (v) => {
+    if (v === null || v === '') return null
+    if (typeof v !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(v)) throw badRequest('Cover color must be a hex color like #FFD93D.')
+    return v.toUpperCase()
+  },
 }
 
 router.patch('/:id', loadGame, wrap(async (req, res) => {
@@ -210,14 +216,15 @@ router.delete('/:id/permanent', loadGame, requireOwner, wrap(async (req, res) =>
 
 // --- Sharing -------------------------------------------------------------
 
-// POST /api/games/:id/sharing { enabled?, public_log? }
+// POST /api/games/:id/sharing { enabled?, public_log?, public_analytics? }
 router.post('/:id/sharing', loadGame, requireOwner, wrap(async (req, res) => {
   const body = req.body ?? {}
   const enabled = 'enabled' in body ? !!body.enabled : req.game.is_public === 1
   const publicLog = 'public_log' in body ? !!body.public_log : req.game.public_log === 1
+  const publicAnalytics = 'public_analytics' in body ? !!body.public_analytics : req.game.public_analytics === 1
   const token = enabled && !req.game.public_token ? crypto.randomUUID() : req.game.public_token
-  run('UPDATE games SET is_public = ?, public_token = ?, public_log = ?, updated_at = ? WHERE id = ?',
-    enabled ? 1 : 0, token, publicLog ? 1 : 0, nowIso(), req.game.id)
+  run('UPDATE games SET is_public = ?, public_token = ?, public_log = ?, public_analytics = ?, updated_at = ? WHERE id = ?',
+    enabled ? 1 : 0, token, publicLog ? 1 : 0, publicAnalytics ? 1 : 0, nowIso(), req.game.id)
   emitGame(req.game.id, 'UPDATE')
   res.json({ game: serializeGame(get('SELECT * FROM games WHERE id = ?', req.game.id)) })
 }))

@@ -49,4 +49,16 @@ router.get('/:token/log', wrap(async (req, res) => {
   })
 }))
 
+// GET /api/public/:token/analytics — the analytics, when the owner opted in.
+// Same redaction as the log: names only.
+router.get('/:token/analytics', wrap(async (req, res) => {
+  const row = findPublicGame(req.params.token)
+  if (!row || row.public_analytics !== 1) throw notFound('These analytics are not shared.')
+  res.json({
+    game: publicGameView(row),
+    teams: all('SELECT * FROM teams WHERE game_id = ? ORDER BY position', row.id).map(serializeTeam),
+    logs: all(`${LOG_SELECT} ORDER BY l.created_at, l.id`, row.id).map(serializePublicLog),
+  })
+}))
+
 export default router

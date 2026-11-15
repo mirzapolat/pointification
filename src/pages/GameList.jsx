@@ -565,7 +565,7 @@ function EmptyForFilter({ filter }) {
 }
 
 const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArchive, onDelete, onRestore, onDeleteForever }, ref) {
-  const accent = TEAM_PALETTE[i % TEAM_PALETTE.length]
+  const accent = game.cover_color || TEAM_PALETTE[i % TEAM_PALETTE.length]
   const teams = game.teams ?? []
   const isArchived = !!game.archived_at
   const isTrashed = !!game.deleted_at

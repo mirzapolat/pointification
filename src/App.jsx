@@ -85,6 +85,7 @@ export default function App() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/p/:token" element={<PublicGame />} />
         <Route path="/p/:token/log" element={<PublicLog />} />
+        <Route path="/p/:token/analytics" element={<GameAnalytics publicView />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/" element={<Home />} />
         <Route path="/game/new" element={<Protected><GameSettings /></Protected>} />

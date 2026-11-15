@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS games (
   is_public        INTEGER NOT NULL DEFAULT 0,
   public_token     TEXT UNIQUE,
   public_log       INTEGER NOT NULL DEFAULT 0,  -- share link may also show the log
+  public_analytics INTEGER NOT NULL DEFAULT 0,  -- …and the analytics
+  cover_color      TEXT,                        -- card cover; NULL = palette by position
   allow_negative   INTEGER NOT NULL DEFAULT 0,
   archived_at      TEXT,
   deleted_at       TEXT,  -- set = in the trash; purged after 30 days

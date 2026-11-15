@@ -84,6 +84,7 @@ function SettingsForm({ initial, user, nav }) {
 
   const [name, setName] = useState(initial?.name ?? '')
   const [allowNegative, setAllowNegative] = useState(!!initial?.allow_negative)
+  const [coverColor, setCoverColor] = useState(initial?.cover_color ?? null) // null = auto
   const [teamSort, setTeamSort] = useState(
     SORT_MODES.includes(initial?.team_sort) ? initial.team_sort : 'manual'
   )
@@ -143,6 +144,18 @@ function SettingsForm({ initial, user, nav }) {
     const next = !allowNegative
     setAllowNegative(next)
     if (instant) await patchGame({ allow_negative: next })
+  }
+
+  // The native color input fires on every drag tick; only save once it settles.
+  const coverTimer = useRef(null)
+  useEffect(() => () => clearTimeout(coverTimer.current), [])
+  const commitCoverColor = (color) => {
+    const next = color ? color.toUpperCase() : null
+    if (next === coverColor) return
+    setCoverColor(next)
+    if (!instant) return
+    clearTimeout(coverTimer.current)
+    coverTimer.current = setTimeout(() => patchGame({ cover_color: next }), 350)
   }
 
   const commitTeamSort = async (mode) => {
@@ -354,6 +367,7 @@ function SettingsForm({ initial, user, nav }) {
       if (allowNegative) initialPatch.allow_negative = true
       if (!samePresets) initialPatch.point_presets = presets
       if (teamSort !== 'manual') initialPatch.team_sort = teamSort
+      if (coverColor) initialPatch.cover_color = coverColor
       if (Object.keys(initialPatch).length) {
         const { error: e2 } = await api.updateGame(gameId, initialPatch)
         if (e2) throw e2
@@ -485,6 +499,10 @@ function SettingsForm({ initial, user, nav }) {
                 placeholder="Friday Quiz Night"
                 autoFocus={!isEdit}
               />
+
+              <div className="mt-6">
+                <CoverColorPicker value={coverColor} onChange={commitCoverColor} />
+              </div>
 
               {isOwner && (
                 <div className="mt-6">
@@ -679,7 +697,7 @@ function SettingsForm({ initial, user, nav }) {
 
           {tab === 'sharing' && isEdit && isOwner && (
             <div>
-              <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} initialPublicLog={initial.public_log} />
+              <SharingSection gameId={initial.id} initialIsPublic={initial.is_public} initialToken={initial.public_token} initialPublicLog={initial.public_log} initialPublicAnalytics={initial.public_analytics} />
               <MembersSection gameId={initial.id} />
             </div>
           )}
@@ -693,6 +711,64 @@ function SettingsForm({ initial, user, nav }) {
         </div>
       </main>
     </motion.div>
+  )
+}
+
+/** The color band on top of the game's card in the list. null = automatic. */
+function CoverColorPicker({ value, onChange }) {
+  const custom = value && !TEAM_PALETTE.some(c => c.toUpperCase() === value)
+  const swatch = (active) =>
+    `relative w-9 h-9 rounded-xl border-2 border-ink transition hover:-translate-y-0.5 ${active ? 'shadow-chunk-sm -translate-y-0.5 ring-2 ring-offset-2 ring-ink ring-offset-cream' : ''}`
+  return (
+    <div>
+      <label className="block text-sm font-semibold mb-1">Cover color</label>
+      <p className="text-xs text-ink/60 mb-2">The color on top of this game's card in your game list.</p>
+      <div role="radiogroup" aria-label="Cover color" className="flex flex-wrap items-center gap-2 p-1">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={!value}
+          onClick={() => onChange(null)}
+          className={`${swatch(!value)} bg-white grid place-items-center text-[10px] font-bold uppercase`}
+          title="Automatic"
+        >Auto</button>
+        {TEAM_PALETTE.map(c => {
+          const active = value === c.toUpperCase()
+          return (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={`Cover color ${c}`}
+              onClick={() => onChange(c)}
+              className={swatch(active)}
+              style={{ background: c }}
+            >
+              {active && (
+                <svg viewBox="0 0 24 24" className="absolute inset-0 m-auto w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </button>
+          )
+        })}
+        <label
+          className={`${swatch(custom)} cursor-pointer overflow-hidden grid place-items-center`}
+          style={{ background: custom ? value : 'conic-gradient(#FF4FA3, #FFD93D, #5EE2C1, #4D7CFF, #9B6DFF, #FF4FA3)' }}
+          title="Custom color"
+        >
+          <span className="sr-only">Custom cover color</span>
+          {!custom && <span className="w-4 h-4 rounded-full bg-white border-2 border-ink grid place-items-center text-[11px] font-bold leading-none" aria-hidden="true">+</span>}
+          <input
+            type="color"
+            value={value ?? '#FFD93D'}
+            onChange={e => onChange(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+          />
+        </label>
+      </div>
+    </div>
   )
 }
 
@@ -1004,9 +1080,10 @@ function MenuPreview() {
   )
 }
 
-function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLog }) {
+function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLog, initialPublicAnalytics }) {
   const [isPublic, setIsPublic] = useState(!!initialIsPublic)
   const [publicLog, setPublicLogState] = useState(!!initialPublicLog)
+  const [publicAnalytics, setPublicAnalyticsState] = useState(!!initialPublicAnalytics)
   const [token, setToken] = useState(initialToken ?? null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -1030,6 +1107,14 @@ function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLo
     setBusy(false)
     if (error) return setErr(error.message)
     setPublicLogState(!!data.public_log)
+  }
+
+  const togglePublicAnalytics = async () => {
+    setErr(null); setBusy(true)
+    const { data, error } = await api.setPublicAnalytics(gameId, !publicAnalytics)
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setPublicAnalyticsState(!!data.public_analytics)
   }
 
   const dialogs = useDialogs()
@@ -1121,6 +1206,13 @@ function SharingSection({ gameId, initialIsPublic, initialToken, initialPublicLo
                 <p className="text-xs text-ink/60 mt-0.5">Viewers can see who changed which points and when. Names only, never emails.</p>
               </div>
               <Toggle on={publicLog} onClick={togglePublicLog} />
+            </div>
+            <div className="flex items-center justify-between gap-4 mt-3 mr-2 mb-2 p-3 rounded-2xl border-2 border-ink bg-white">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">Show analytics on the public link</div>
+                <p className="text-xs text-ink/60 mt-0.5">Viewers can see the charts, records and stats. Names only, never emails.</p>
+              </div>
+              <Toggle on={publicAnalytics} onClick={togglePublicAnalytics} />
             </div>
           </motion.div>
         )}

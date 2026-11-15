@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import * as api from '../lib/api'
-import { subscribeToGame } from '../lib/realtime'
+import { subscribeToGame, subscribeToPublicGame } from '../lib/realtime'
 
 const SCOPES = [
   { id: 'week', label: 'Week',  days: 7   },
@@ -26,8 +26,13 @@ const GAIN = '#12A27A'   // diverging pole: points won
 const LOSS = '#E5486B'   // diverging pole: points lost
 const HEAT = '77,124,255' // candy blue, sequential ramp via opacity
 
-export default function GameAnalytics() {
-  const { id } = useParams()
+/**
+ * Owner/member analytics at /game/:id/analytics, or — with `publicView` — the
+ * read-only version behind a share link at /p/:token/analytics (names only).
+ */
+export default function GameAnalytics({ publicView = false }) {
+  const { id: gameId, token } = useParams()
+  const id = publicView ? null : gameId
   const nav = useNavigate()
   const [game, setGame] = useState(null)
   const [teams, setTeams] = useState([])
@@ -38,16 +43,37 @@ export default function GameAnalytics() {
   const [loading, setLoading] = useState(true)
 
   const load = async () => {
-    const [{ data: g }, { data: l }] = await Promise.all([api.getGame(id), api.listLogs(id)])
-    setGame(g ?? null)
-    setTeams(g?.teams ?? [])
-    setLogs(l ?? [])
+    if (publicView) {
+      const { data: d } = await api.getPublicAnalytics(token)
+      setGame(d?.game ?? null)
+      setTeams(d?.teams ?? [])
+      setLogs(d?.logs ?? [])
+    } else {
+      const [{ data: g }, { data: l }] = await Promise.all([api.getGame(id), api.listLogs(id)])
+      setGame(g ?? null)
+      setTeams(g?.teams ?? [])
+      setLogs(l ?? [])
+    }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [id, token, publicView])
   // Inserts and undos both change history, so re-read rather than patch.
-  useEffect(() => subscribeToGame(id, { point_logs: load, teams: load }), [id])
+  // The public stream only carries scoreboard changes; every score change
+  // (and undo) moves a team, so re-read then.
+  useEffect(() => {
+    if (publicView) {
+      if (!token) return
+      return subscribeToPublicGame(token, {
+        teams: load,
+        games: ({ type, row }) => {
+          if (type === 'DELETE' || !row?.is_public || !row.public_analytics || row.public_token !== token) setGame(null)
+          else setGame(g => (g ? { ...g, ...row } : g))
+        },
+      })
+    }
+    return subscribeToGame(id, { point_logs: load, teams: load })
+  }, [id, token, publicView])
 
   const since = useMemo(() => {
     const s = SCOPES.find(x => x.id === scope)
@@ -58,6 +84,18 @@ export default function GameAnalytics() {
 
   if (loading) {
     return <div className="h-full grid place-items-center bg-cream font-display text-3xl animate-pulse">loading…</div>
+  }
+  if (!game && publicView) {
+    return (
+      <div className="h-full grid place-items-center bg-cream px-4">
+        <div className="card-chunk p-8 text-center max-w-sm">
+          <div className="text-5xl mb-3" aria-hidden="true">🔒</div>
+          <h2 className="font-display text-3xl font-bold">Not available</h2>
+          <p className="text-ink/60 mt-2">The owner hasn't shared this game's analytics.</p>
+          <Link to={`/p/${encodeURIComponent(token)}`} className="btn-chunk bg-candy-mint mt-5">Back to scoreboard</Link>
+        </div>
+      </div>
+    )
   }
   if (!game) {
     return (
@@ -75,7 +113,9 @@ export default function GameAnalytics() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="min-h-full pb-home bg-cream bg-grid">
-      <Header id={id} name={game.name} onBack={() => nav('/')} />
+      {publicView
+        ? <PublicHeader token={token} name={game.name} showLog={!!game.public_log} />
+        : <Header id={id} name={game.name} onBack={() => nav('/')} />}
 
       <main className="max-w-6xl mx-auto px-4 md:px-8 py-5 md:py-8 space-y-5 md:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
@@ -136,9 +176,11 @@ export default function GameAnalytics() {
             <section>
               <div className="flex items-end justify-between gap-3">
                 <SectionTitle>Teams</SectionTitle>
-                <Link to={`/game/${id}/log`} className="mb-3 text-sm font-semibold underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">
-                  Full log →
-                </Link>
+                {(!publicView || game.public_log) && (
+                  <Link to={publicView ? `/p/${encodeURIComponent(token)}/log` : `/game/${id}/log`} className="mb-3 text-sm font-semibold underline decoration-2 underline-offset-4 decoration-ink/30 hover:decoration-ink">
+                    Full log →
+                  </Link>
+                )}
               </div>
               <TeamCards a={a} teams={teams} />
             </section>
@@ -179,6 +221,33 @@ function Header({ id, name, onBack }) {
           <span className="hidden md:inline">Open game →</span>
         </Link>
       </div>
+    </header>
+  )
+}
+
+function PublicHeader({ token, name, showLog }) {
+  const base = `/p/${encodeURIComponent(token)}`
+  return (
+    <header className="px-safe [--px:1rem] md:[--px:2rem] py-3 md:py-4 flex items-center justify-between gap-3 bg-cream/80 backdrop-blur border-b-2 border-ink sticky top-0 z-20">
+      <Link to={base} className="btn-chunk bg-white text-sm h-10 py-0 px-2.5 md:px-3 shrink-0" aria-label="Back to scoreboard" title="Back to scoreboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="md:hidden" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+        </svg>
+        <span className="hidden md:inline">← Scoreboard</span>
+      </Link>
+      <div className="min-w-0 text-center flex-1">
+        <div className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-ink/50 leading-none mb-1">Analytics</div>
+        <h1 className="font-display font-bold text-base md:text-2xl truncate leading-tight">{name}</h1>
+      </div>
+      {showLog ? (
+        <Link to={`${base}/log`} className="btn-chunk bg-white text-sm h-10 py-0 px-2.5 md:px-3 shrink-0" aria-label="Open log" title="Open log">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <span className="hidden md:inline">Log</span>
+        </Link>
+      ) : <div className="w-10 shrink-0" aria-hidden="true" />}
     </header>
   )
 }

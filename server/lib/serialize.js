@@ -5,7 +5,7 @@ const bool = (v) => v === 1 || v === true
 
 // What anonymous share-link viewers may see of a game, over HTTP and SSE.
 export const PUBLIC_GAME_FIELDS = [
-  'id', 'name', 'is_public', 'public_token', 'public_log',
+  'id', 'name', 'is_public', 'public_token', 'public_log', 'public_analytics',
   'logo_path', 'logo_placement', 'logo_shape', 'logo_scale', 'team_sort',
 ]
 
@@ -20,6 +20,7 @@ export function serializeGame(row) {
     is_public: bool(row.is_public),
     public_token: row.public_token ?? null,
     public_log: bool(row.public_log),
+    public_analytics: bool(row.public_analytics),
     allow_negative: bool(row.allow_negative),
     archived_at: row.archived_at ?? null,
     deleted_at: row.deleted_at ?? null,
@@ -29,6 +30,7 @@ export function serializeGame(row) {
     logo_scale: row.logo_scale,
     point_presets: presets,
     team_sort: row.team_sort,
+    cover_color: row.cover_color ?? null,
     rounds_enabled: bool(row.rounds_enabled),
     current_round_id: row.current_round_id ?? null,
     created_at: row.created_at,

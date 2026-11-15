@@ -246,7 +246,7 @@ export default function GameScreen() {
         onClick={openRoundMenu}
         aria-haspopup="menu"
         aria-expanded={!!roundMenu}
-        className="h-10 px-3 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-0 max-w-full sm:min-w-[8.5rem] hover:bg-candy-yellow transition inline-flex items-center justify-center gap-1.5"
+        className="h-10 px-3 rounded-xl border-2 border-ink bg-white font-display font-semibold text-sm min-w-0 max-w-full sm:min-w-[8.5rem] shadow-chunk hover:bg-candy-yellow hover:-translate-y-0.5 active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition inline-flex items-center justify-center gap-1.5"
         title={roundsOn ? 'Switch round' : 'Game menu'}
       >
         {roundsOn ? (

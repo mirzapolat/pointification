@@ -133,6 +133,9 @@ export const setGameSharing = (id, enabled) =>
 export const setPublicLog = (id, enabled) =>
   pick(request(`/games/${id}/sharing`, { method: 'POST', body: { public_log: enabled } }), 'game')
 
+export const setPublicAnalytics = (id, enabled) =>
+  pick(request(`/games/${id}/sharing`, { method: 'POST', body: { public_analytics: enabled } }), 'game')
+
 export const getGameNotifications = (id) => request(`/games/${id}/notifications`)
 export const setGameNotifications = (id, enabled) =>
   request(`/games/${id}/notifications`, { method: 'PUT', body: { enabled } })
@@ -211,6 +214,7 @@ export const removeMember = (gameId, userId) =>
 
 export const getPublicGame = (token) => request(`/public/${encodeURIComponent(token)}`)
 export const getPublicLog = (token) => request(`/public/${encodeURIComponent(token)}/log`)
+export const getPublicAnalytics = (token) => request(`/public/${encodeURIComponent(token)}/analytics`)
 
 // --- Uploaded files ------------------------------------------------------
 

@@ -28,6 +28,8 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('games', 'deleted_at', 'TEXT')
 ensureColumn('games', 'public_log', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('games', 'public_analytics', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('games', 'cover_color', 'TEXT')
 ensureColumn('users', 'notify_points', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('point_logs', 'undone_at', 'TEXT')
 ensureColumn('game_members', 'nickname', 'TEXT')

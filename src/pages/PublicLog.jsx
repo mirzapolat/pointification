@@ -66,6 +66,19 @@ export default function PublicLog() {
           <div className="text-[11px] font-bold uppercase tracking-wider text-ink/50 leading-none mb-1">Log</div>
           <h1 className="font-display font-bold text-lg md:text-2xl truncate leading-none">{data.game.name}</h1>
         </div>
+        {data.game.public_analytics ? (
+          <Link
+            to={`/p/${encodeURIComponent(token)}/analytics`}
+            className="btn-chunk bg-candy-mint text-sm h-10 py-0 px-2.5 md:px-3 shrink-0"
+            aria-label="Open analytics"
+            title="Open analytics"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>
+            </svg>
+            <span className="hidden md:inline">Analytics</span>
+          </Link>
+        ) : <div className="w-10 shrink-0" aria-hidden="true" />}
       </header>
       <main className="max-w-3xl mx-auto px-4 md:px-8 py-6 md:py-10">
         <AuditLog logs={data.logs} teams={data.teams} rounds={data.rounds} />
