@@ -9,6 +9,7 @@ import { requireAuth, hasGameAccess } from '../lib/auth.js'
 import { publish } from '../lib/events.js'
 import { undoLastPointChange, LOG_SELECT } from '../lib/points.js'
 import { saveLogo, deleteLogo, deleteLogoDir, allowedTypes } from '../lib/logos.js'
+import { exportFile, importGames, ownedGamesForExport } from '../lib/transfer.js'
 
 const router = express.Router()
 router.use(requireAuth)
@@ -101,12 +102,35 @@ router.post('/', wrap(async (req, res) => {
   res.status(201).json({ game: serializeGame(get('SELECT * FROM games WHERE id = ?', id)) })
 }))
 
+// --- Export / import -------------------------------------------------------
+// Registered before /:id so "export" is never read as a game id.
+
+// GET /api/games/export — every game the user owns (archived too, not trashed).
+router.get('/export', wrap(async (req, res) => {
+  res.setHeader('cache-control', 'no-store')
+  res.json(exportFile(ownedGamesForExport(req.user.id), req.user.id))
+}))
+
+// POST /api/games/import — a file from either export endpoint. Always creates
+// new games owned by the caller; the body limit is raised in index.js.
+router.post('/import', wrap(async (req, res) => {
+  const ids = importGames(req.user.id, req.body)
+  for (const id of ids) emitGame(id, 'INSERT')
+  res.status(201).json({ games: ids.map(id => serializeGame(get('SELECT * FROM games WHERE id = ?', id))) })
+}))
+
 // GET /api/games/:id — the game with its teams and rounds.
 router.get('/:id', loadGame, wrap(async (req, res) => {
   const game = serializeGame(req.game)
   game.teams = all('SELECT * FROM teams WHERE game_id = ? ORDER BY position', game.id).map(serializeTeam)
   game.rounds = all('SELECT * FROM rounds WHERE game_id = ? ORDER BY position', game.id).map(serializeRound)
   res.json({ game })
+}))
+
+// GET /api/games/:id/export — one game, for anyone who can open it.
+router.get('/:id/export', loadGame, wrap(async (req, res) => {
+  res.setHeader('cache-control', 'no-store')
+  res.json(exportFile([req.game], req.user.id))
 }))
 
 // PATCH /api/games/:id — collaborators may edit settings; sharing stays owner-only.

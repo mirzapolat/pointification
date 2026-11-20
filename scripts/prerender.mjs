@@ -10,8 +10,9 @@ for (const pathname of Object.keys(PUBLIC_PAGES)) {
   const name = pathname === '/' ? 'index' : pathname.slice(1)
   await writeFile(`dist/prerender/${name}.html`, html)
 }
+const lastmod = new Date().toISOString().slice(0, 10)
 await writeFile('dist/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${Object.keys(PUBLIC_PAGES).map(path => `  <url><loc>${SITE_URL}${path}</loc></url>`).join('\n')}
+${Object.keys(PUBLIC_PAGES).map(path => `  <url><loc>${SITE_URL}${path}</loc><lastmod>${lastmod}</lastmod></url>`).join('\n')}
 </urlset>\n`)
 console.log(`Pre-rendered ${Object.keys(PUBLIC_PAGES).length} public pages and sitemap.`)

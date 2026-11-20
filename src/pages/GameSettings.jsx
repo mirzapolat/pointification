@@ -883,7 +883,7 @@ function LogoSection({ logoPath, placement, shape, pendingPreview, removeLogo, b
           {hasLogo ? (
             <>
               <img src={currentUrl} alt="Logo preview" className="w-full h-full object-contain" />
-              <span className="absolute inset-0 grid place-items-center bg-ink/55 text-white text-[11px] font-semibold opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition">
+              <span className="absolute inset-0 grid place-items-center bg-scrim/55 text-white text-[11px] font-semibold opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition">
                 Replace
               </span>
             </>
@@ -1306,7 +1306,7 @@ function QRPreview({ url }) {
         ref={buttonRef}
         type="button"
         onClick={openMenu}
-        className="block p-2.5 rounded-2xl border-2 border-ink bg-white shadow-chunk-sm hover:-translate-y-0.5 transition"
+        className="block p-2.5 rounded-2xl border-2 border-ink bg-[#fff] shadow-chunk-sm hover:-translate-y-0.5 transition"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         title="QR code options"
@@ -1353,9 +1353,9 @@ function QRPreview({ url }) {
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           onClick={() => setFullscreen(false)}
-          className="fixed inset-0 z-[100] bg-ink/85 backdrop-blur-sm grid place-items-center p-6 cursor-zoom-out"
+          className="fixed inset-0 z-[100] bg-scrim/85 backdrop-blur-sm grid place-items-center p-6 cursor-zoom-out"
         >
-          <div onClick={e => e.stopPropagation()} className="card-chunk bg-white p-5 md:p-8 grid place-items-center cursor-default">
+          <div onClick={e => e.stopPropagation()} className="card-chunk bg-[#fff] p-5 md:p-8 grid place-items-center cursor-default">
             <div className="w-[min(78vw,78vh)] h-[min(78vw,78vh)]">
               <QRCodeSVG value={url} size={512} bgColor="#ffffff" fgColor="#0F0F12" level="M" marginSize={0} style={{ width: '100%', height: '100%' }} />
             </div>

@@ -214,7 +214,7 @@ function Blobs() {
     <motion.div
       key={i}
       aria-hidden
-      className="absolute rounded-full border-2 border-ink opacity-70"
+      className="absolute rounded-full border-2 border-ink opacity-70 dark:opacity-85"
       style={{ left: b.x, top: b.y, width: b.s, height: b.s, background: b.c }}
       animate={{ y: [0, -14, 0], rotate: [0, 5, 0] }}
       transition={{ duration: 6 + i, repeat: Infinity, ease: 'easeInOut', delay: i * 0.4 }}

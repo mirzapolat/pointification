@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useAnimationControls, useReducedMotion } from 'framer-motion'
 import * as api from '../lib/api'
 import { logoUrl } from '../lib/api'
 import { subscribeToPublicGame } from '../lib/realtime'
@@ -47,7 +47,9 @@ export default function PublicGame() {
           const next = [...prev]
           next[idx] = { ...next[idx], ...row }
           if (row.score !== prevScore) {
-            setFlash(f => ({ ...f, [row.id]: (f[row.id] ?? 0) + 1 }))
+            // n changes on every update so the row replays; delta picks the up/down animation.
+            const delta = row.score - prevScore
+            setFlash(f => ({ ...f, [row.id]: { n: (f[row.id]?.n ?? 0) + 1, delta } }))
           }
           return next
         })
@@ -116,7 +118,7 @@ export default function PublicGame() {
         {sortedTeams.length === 0
           ? <div className="flex-1 grid place-items-center text-cream/70 font-display text-xl">No teams yet.</div>
           : sortedTeams.map((t, i) => (
-              <Row key={t.id} team={t} index={i} flashKey={flash[t.id] ?? 0} compact={showCenter} isLast={i === sortedTeams.length - 1} />
+              <Row key={t.id} team={t} index={i} change={flash[t.id]} compact={showCenter} isLast={i === sortedTeams.length - 1} />
             ))}
         {showCenter && <LogoCenterBadge src={logoSrc} shape={game.logo_shape} scale={game.logo_scale} />}
       </div>
@@ -204,7 +206,7 @@ function ViewMenu({ token, showLog, showAnalytics }) {
   )
 }
 
-function Row({ team, index, flashKey, compact, isLast }) {
+function Row({ team, index, change, compact, isLast }) {
   const padX = `px-safe [--px:1.5rem] md:[--px:3rem] ${isLast ? 'pb-home' : 'border-b-2'}`
   const nameSize = compact
     ? 'text-2xl sm:text-3xl md:text-5xl lg:text-6xl'
@@ -212,6 +214,39 @@ function Row({ team, index, flashKey, compact, isLast }) {
   const scoreSize = compact
     ? 'text-3xl sm:text-4xl md:text-6xl lg:text-7xl'
     : 'text-4xl sm:text-5xl md:text-7xl lg:text-8xl'
+
+  const reduce = useReducedMotion()
+  const content = useAnimationControls()
+  const score = useAnimationControls()
+  // Every change gets its own burst, so quick successive updates overlap
+  // instead of cutting each other off.
+  const [bursts, setBursts] = useState([])
+
+  useEffect(() => {
+    if (!change?.n || !change.delta) return
+    const id = `${change.n}-${Date.now()}`
+    setBursts(b => [...b.slice(-3), { id, delta: change.delta }])
+    const timer = setTimeout(() => setBursts(b => b.filter(x => x.id !== id)), 1600)
+
+    if (!reduce) {
+      if (change.delta > 0) {
+        content.start({ y: [0, -10, 0], transition: { duration: 0.45, ease: 'easeOut' } })
+        score.start({
+          scale: [1, 1.35, 0.94, 1.04, 1], rotate: [0, -4, 2, 0, 0],
+          transition: { duration: 0.75, times: [0, 0.3, 0.55, 0.8, 1], ease: 'easeOut' },
+        })
+      } else {
+        content.start({ x: [0, -16, 13, -9, 6, -3, 0], transition: { duration: 0.55, ease: 'easeOut' } })
+        score.start({
+          scaleY: [1, 0.68, 1.1, 0.97, 1], scaleX: [1, 1.18, 0.95, 1.02, 1], y: [0, 12, -3, 0, 0],
+          transition: { duration: 0.7, times: [0, 0.25, 0.55, 0.8, 1], ease: 'easeOut' },
+        })
+      }
+    }
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [change?.n])
+
   return (
     <motion.div
       layout="position"
@@ -221,27 +256,129 @@ function Row({ team, index, flashKey, compact, isLast }) {
         default: { type: 'spring', stiffness: 140, damping: 18, delay: index * 0.05 },
         layout: { type: 'spring', stiffness: 260, damping: 26 },
       }}
-      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-ink overflow-hidden`}
+      className={`on-color relative flex-1 min-h-0 flex items-center ${padX} border-ink overflow-hidden`}
       style={{ background: team.color }}
     >
-      <AnimatePresence>
-        {flashKey > 0 && (
+      {bursts.map(b => (b.delta > 0
+        ? <GainWash key={b.id} reduce={reduce} />
+        : <LossWash key={b.id} reduce={reduce} />
+      ))}
+
+      <motion.div animate={content} className="relative z-10 flex-1 min-w-0 flex items-center justify-between gap-4">
+        <div className={`flex items-center gap-3 md:gap-5 min-w-0 ${compact ? 'pr-[20%] sm:pr-[14%] md:pr-[14%]' : ''}`}>
+          <div className="w-3 md:w-4 h-12 md:h-16 rounded-full bg-ink/15" />
+          <h2 className={`font-display font-bold truncate ${nameSize}`}>{team.name}</h2>
+        </div>
+        <div className="relative shrink-0">
           <motion.div
-            key={flashKey}
-            initial={{ opacity: 0.85 }}
-            animate={{ opacity: 0 }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="absolute inset-0 bg-white pointer-events-none"
-          />
-        )}
-      </AnimatePresence>
-      <div className={`relative z-10 flex items-center gap-3 md:gap-5 min-w-0 ${compact ? 'pr-[20%] sm:pr-[14%] md:pr-[14%]' : ''}`}>
-        <div className="w-3 md:w-4 h-12 md:h-16 rounded-full bg-ink/15" />
-        <h2 className={`font-display font-bold truncate ${nameSize}`}>{team.name}</h2>
-      </div>
-      <div className={`relative z-10 font-display font-bold tabular-nums ${scoreSize}`}>
-        <AnimatedNumber value={team.score} />
-      </div>
+            animate={score}
+            style={{ originY: 1 }}
+            className={`font-display font-bold tabular-nums ${scoreSize}`}
+          >
+            <AnimatedNumber value={team.score} duration={700} />
+          </motion.div>
+          {bursts.map(b => (
+            <span key={b.id} className="pointer-events-none absolute inset-0">
+              {b.delta > 0 && !reduce && <Sparks />}
+              <DeltaChip delta={b.delta} reduce={reduce} />
+            </span>
+          ))}
+        </div>
+      </motion.div>
     </motion.div>
   )
+}
+
+/** Points gained: a band of light sweeps up through the row. */
+function GainWash({ reduce }) {
+  if (reduce) {
+    return (
+      <motion.div
+        initial={{ opacity: 0.6 }} animate={{ opacity: 0 }} transition={{ duration: 0.9 }}
+        className="absolute inset-0 bg-[#fff] pointer-events-none"
+      />
+    )
+  }
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0.55 }} animate={{ opacity: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="absolute inset-0 bg-[#fff] pointer-events-none"
+      />
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: '-100%' }} transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+        className="absolute inset-x-0 top-0 h-full pointer-events-none bg-gradient-to-t from-transparent via-[#fff]/60 to-transparent"
+      />
+    </>
+  )
+}
+
+/** Points lost: the row dims, with the shadow draining downward. */
+function LossWash({ reduce }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0.45 }} animate={{ opacity: 0 }}
+        transition={{ duration: reduce ? 0.9 : 0.8, ease: 'easeOut' }}
+        className="absolute inset-0 bg-[#0F0F12] pointer-events-none"
+      />
+      {!reduce && (
+        <motion.div
+          initial={{ y: '-100%', opacity: 0.5 }} animate={{ y: '100%', opacity: 0 }}
+          transition={{ duration: 0.8, ease: 'easeIn' }}
+          className="absolute inset-x-0 top-0 h-full pointer-events-none bg-gradient-to-b from-transparent via-[#0F0F12]/40 to-transparent"
+        />
+      )}
+    </>
+  )
+}
+
+/** "+N" floats up and away; "−N" drops like it fell off the board. */
+function DeltaChip({ delta, reduce }) {
+  const up = delta > 0
+  const label = up ? `+${delta}` : `−${Math.abs(delta)}`
+  const motionProps = reduce
+    ? { initial: { opacity: 0 }, animate: { opacity: [0, 1, 1, 0] }, transition: { duration: 1.4, times: [0, 0.1, 0.7, 1] } }
+    : up
+      ? {
+          initial: { opacity: 0, y: 10, scale: 0.4 },
+          animate: { opacity: [0, 1, 1, 0], y: [10, -20, -45, -90], scale: [0.4, 1.2, 1, 0.9] },
+          transition: { duration: 1.3, times: [0, 0.2, 0.65, 1], ease: 'easeOut' },
+        }
+      : {
+          initial: { opacity: 0, y: -10, scale: 1.3, rotate: 0 },
+          animate: { opacity: [0, 1, 1, 0], y: [-10, 0, 20, 100], scale: [1.3, 1, 1, 0.95], rotate: [0, 0, -6, -18] },
+          transition: { duration: 1.2, times: [0, 0.12, 0.45, 1], ease: 'easeIn' },
+        }
+  return (
+    // Beside the score rather than above it, so short rows don't clip it.
+    <span className="absolute right-full top-1/2 -translate-y-1/2 mr-3 md:mr-6">
+      <motion.span
+        {...motionProps}
+        className={`block whitespace-nowrap rounded-full border-2 border-ink px-3 md:px-5 py-0.5 md:py-1.5 font-display font-bold text-xl sm:text-2xl md:text-4xl shadow-chunk-sm ${up ? 'bg-[#fff] text-[#0F0F12]' : 'bg-[#0F0F12] text-[#fff]'}`}
+      >
+        {label}
+      </motion.span>
+    </span>
+  )
+}
+
+const SPARKS = Array.from({ length: 12 }, (_, i) => {
+  const angle = (i / 12) * Math.PI * 2 + 0.3
+  const dist = 120 + (i % 3) * 40
+  return { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist * 0.6, size: i % 2 ? 14 : 20, color: ['#FFD93D', '#FFFFFF', '#5EE2C1'][i % 3] }
+})
+
+/** A small burst of sparks from the score. */
+function Sparks() {
+  return SPARKS.map((p, i) => (
+    <motion.span
+      key={i}
+      initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
+      animate={{ x: p.x, y: p.y, scale: [0, 1.2, 0], opacity: [1, 1, 0] }}
+      transition={{ duration: 0.8, ease: 'easeOut', delay: 0.05 }}
+      className="absolute left-1/2 top-1/2 -ml-2 -mt-2 rounded-full border-2 border-[#0F0F12]"
+      style={{ width: p.size, height: p.size, background: p.color }}
+    />
+  ))
 }

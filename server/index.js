@@ -15,7 +15,7 @@ import cookieParser from 'cookie-parser'
 
 import { DB_PATH } from './db.js'
 import { LOGO_DIR } from './lib/logos.js'
-import { attachUser, pruneSessions } from './lib/auth.js'
+import { attachUser, requireAuth, pruneSessions } from './lib/auth.js'
 import { errorHandler } from './lib/http.js'
 import { mailEnabled } from './lib/mail.js'
 import { renderOgImage } from './og.js'
@@ -54,6 +54,10 @@ app.use('/api', (_req, res, next) => {
   res.setHeader('x-robots-tag', 'noindex, nofollow')
   next()
 })
+// Game imports carry every log entry plus base64 logos, so they get more room
+// than the general JSON limit — only for signed-in users. Registered first:
+// body parsers skip bodies that are already parsed.
+app.use('/api/games/import', attachUser, requireAuth, express.json({ limit: '50mb' }))
 app.use('/api', express.raw({ type: 'image/*', limit: '4mb' }))
 app.use('/api', express.json({ limit: '1mb' }))
 app.use('/api', attachUser)

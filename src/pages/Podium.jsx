@@ -315,7 +315,7 @@ function PodiumSlot({ team, rank, total, revealed, isWinner }) {
                     opacity: { duration: 0.2, delay: 0.5 },
                     rotate: { duration: 1.0, delay: 1.0, ease: 'easeInOut' },
                   }}
-                  className="absolute left-1/2 -top-14 md:-top-16 -translate-x-1/2 text-5xl md:text-7xl pointer-events-none drop-shadow-[3px_3px_0_#0F0F12]"
+                  className="absolute left-1/2 -top-14 md:-top-16 -translate-x-1/2 text-5xl md:text-7xl pointer-events-none drop-shadow-[3px_3px_0_rgb(var(--shadow))]"
                   aria-hidden
                 >
                   👑
@@ -327,7 +327,7 @@ function PodiumSlot({ team, rank, total, revealed, isWinner }) {
                 exit={{ y: 30, opacity: 0, scale: 0.7 }}
                 transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.2 }}
                 className={`card-chunk relative p-2.5 md:p-4 text-center ${isWinner ? 'bg-candy-yellow' : 'bg-white'}`}
-                style={isWinner ? { boxShadow: '8px 8px 0 0 #0F0F12' } : undefined}
+                style={isWinner ? { boxShadow: '8px 8px 0 0 rgb(var(--shadow))' } : undefined}
               >
                 <div className="text-2xl md:text-3xl leading-none" aria-hidden>{medal}</div>
                 <div className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-ink/60 mt-0.5">
@@ -373,7 +373,7 @@ function PodiumSlot({ team, rank, total, revealed, isWinner }) {
               exit={{ scaleY: 0, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 140, damping: 18, mass: 0.9 }}
               style={{ background: team.color, transformOrigin: 'bottom' }}
-              className="absolute inset-0 rounded-t-2xl border-2 border-ink shadow-chunk overflow-hidden grid place-items-center"
+              className="on-color absolute inset-0 rounded-t-2xl border-2 border-ink shadow-chunk overflow-hidden grid place-items-center"
             >
               <div className="absolute inset-0 bg-dots opacity-25" />
               <motion.div

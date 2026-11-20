@@ -225,7 +225,7 @@ export default function Onboarding() {
                       className="card-chunk overflow-hidden"
                     >
                       <div
-                        className="h-16 border-b-2 border-ink relative"
+                        className="on-color h-16 border-b-2 border-ink relative"
                         style={{ background: t.color }}
                       >
                         <div className="absolute inset-0 bg-dots opacity-30" />
@@ -443,7 +443,7 @@ function Blobs() {
       {blobs.map((b, i) => (
         <motion.div
           key={i}
-          className="absolute rounded-full border-2 border-ink opacity-50"
+          className="absolute rounded-full border-2 border-ink opacity-50 dark:opacity-75"
           style={{ left: b.x, top: b.y, width: b.s, height: b.s, background: b.c }}
           animate={{ y: [0, -14, 0], rotate: [0, 5, 0] }}
           transition={{ duration: 7 + i, repeat: Infinity, ease: 'easeInOut', delay: i * 0.4 }}

@@ -2,8 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- Theme -----------------------------------------------------------------
+   Colours are RGB channels so Tailwind's opacity modifiers work
+   (`text-ink/60` → rgb(var(--ink) / 0.6)). Dark mode follows the system
+   setting; nothing to toggle.
+     --cream    page background          (bg-cream)
+     --surface  raised cards & inputs    (bg-white)
+     --ink      text and solid fills     (text-ink, bg-ink)
+     --line     outlines                 (border-ink, ring-ink)
+     --shadow   hard offset shadows      (shadow-chunk*) */
 :root {
   color-scheme: light;
+  --cream: 255 248 236;
+  --surface: 255 255 255;
+  --ink: 15 15 18;
+  --line: 15 15 18;
+  --shadow: 15 15 18;
+  --dots: 1;
+  --checker: 237 230 217;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --cream: 19 18 25;
+    --surface: 31 30 41;
+    --ink: 244 238 227;
+    --line: 226 219 205;
+    --shadow: 226 219 205;
+    --dots: 0.22;
+    --checker: 52 50 64;
+  }
+
+  /* Raised surfaces use light text — including ones nested in a coloured area. */
+  html body :where(
+    [class~="bg-white"], [class*="bg-white/"],
+    [class~="bg-cream"], [class*="bg-cream/"],
+    .card-chunk, .input-chunk
+  ) {
+    --ink: 244 238 227;
+    --dots: 0.22;
+    color: rgb(var(--ink));
+  }
+
+  /* Candy and team colours are bright in both themes, so text on them stays
+     dark. `html body` outranks element defaults (preflight `a { color: inherit }`)
+     while any text-* utility still wins. Kept after the
+     surface rule so `card-chunk bg-candy-yellow` resolves to dark text. */
+  html body :where(
+    [class~="bg-candy-pink"],
+    [class~="bg-candy-yellow"],
+    [class~="bg-candy-mint"],
+    [class~="bg-candy-blue"],
+    [class~="bg-candy-coral"],
+    [class~="bg-candy-purple"],
+    [class~="hover:bg-candy-pink"]:hover,
+    [class~="hover:bg-candy-yellow"]:hover,
+    [class~="hover:bg-candy-mint"]:hover,
+    [class~="hover:bg-candy-blue"]:hover,
+    [class~="hover:bg-candy-coral"]:hover,
+    [class~="hover:bg-candy-purple"]:hover,
+    /* Solid inline team/accent fills (translucent ones serialize as rgba). */
+    [style*="background: rgb("]:not([style*="var("]),
+    [style*="background-color: rgb("]:not([style*="var("]),
+    .on-color
+  ) {
+    --ink: 15 15 18;
+    --dots: 1;
+    color: rgb(var(--ink));
+  }
+
+  /* Deeper tones read better than the light-mode 700s on dark surfaces. */
+  .text-emerald-700 { color: #34D399; }
+  .text-rose-700 { color: #FB7185; }
+  .bg-rose-50 { background-color: rgb(244 63 94 / 0.14); }
 }
 
 html, body, #root {
@@ -13,23 +85,23 @@ html, body, #root {
 body {
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
-  background: #FFF8EC;
-  color: #0F0F12;
+  background: rgb(var(--cream));
+  color: rgb(var(--ink));
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
 /* Confetti-y background dots */
 .bg-dots {
-  background-image: radial-gradient(#0F0F12 1px, transparent 1px);
+  background-image: radial-gradient(rgb(var(--ink) / var(--dots)) 1px, transparent 1px);
   background-size: 22px 22px;
   background-position: 0 0;
 }
 
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(15,15,18,0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15,15,18,0.06) 1px, transparent 1px);
+    linear-gradient(to right, rgb(var(--ink) / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(var(--ink) / 0.06) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 
@@ -42,8 +114,11 @@ body {
   @apply w-full px-4 py-3 rounded-2xl border-2 border-ink bg-white font-medium outline-none focus:shadow-chunk-sm focus:-translate-y-0.5 transition-all placeholder:text-ink/40;
 }
 
-.card-chunk {
-  @apply rounded-3xl border-2 border-ink bg-white shadow-chunk;
+/* In the components layer so utilities (e.g. bg-candy-mint) can override it. */
+@layer components {
+  .card-chunk {
+    @apply rounded-3xl border-2 border-ink bg-white shadow-chunk;
+  }
 }
 
 /* Hide scrollbar when needed */
@@ -72,12 +147,12 @@ body {
 
 /* Checkerboard behind images so transparent areas read as transparent. */
 .bg-checker {
-  background-color: #fff;
+  background-color: rgb(var(--surface));
   background-image:
-    linear-gradient(45deg, #EDE6D9 25%, transparent 25%),
-    linear-gradient(-45deg, #EDE6D9 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #EDE6D9 75%),
-    linear-gradient(-45deg, transparent 75%, #EDE6D9 75%);
+    linear-gradient(45deg, rgb(var(--checker)) 25%, transparent 25%),
+    linear-gradient(-45deg, rgb(var(--checker)) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgb(var(--checker)) 75%),
+    linear-gradient(-45deg, transparent 75%, rgb(var(--checker)) 75%);
   background-size: 18px 18px;
   background-position: 0 0, 0 9px, 9px -9px, -9px 0;
 }

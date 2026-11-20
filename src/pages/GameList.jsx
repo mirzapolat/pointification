@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { TEAM_PALETTE } from '../lib/colors.js'
 import { useDialogs } from '../components/Dialogs.jsx'
 import { track } from '../lib/analytics.js'
+import { downloadGame } from '../lib/transfer.js'
 
 const FILTERS = [
   { id: 'all',      label: 'All',             icon: AllIcon,      accent: '#FFD93D' },
@@ -321,7 +322,7 @@ function Sidebar({ filter, onChange, user }) {
                 onClick={() => onChange(f.id)}
                 style={active ? { background: f.accent } : undefined}
                 className={`flex items-center gap-2 px-3 py-2 rounded-2xl border-2 border-ink font-display font-semibold text-sm transition text-ink ${
-                  active ? 'shadow-chunk-sm' : 'bg-white hover:bg-candy-yellow'
+                  active ? 'on-color shadow-chunk-sm' : 'bg-white hover:bg-candy-yellow'
                 }`}
               >
                 <span
@@ -592,6 +593,12 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
       setMenu(null)
     }
   }
+  const dialogs = useDialogs()
+  const exportThis = async () => {
+    setMenu(null)
+    const { error } = await downloadGame(game)
+    if (error) dialogs.alert({ title: 'Could not export', message: error.message })
+  }
   return (
     <motion.div
       ref={ref}
@@ -605,7 +612,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
     >
       <Link to={`/game/${game.id}`} className="flex flex-col flex-1">
         <div
-          className="h-28 border-b-2 border-ink relative overflow-hidden"
+          className="on-color h-28 border-b-2 border-ink relative overflow-hidden"
           style={{ background: accent }}
         >
           <div className="absolute inset-0 bg-dots opacity-30" />
@@ -632,14 +639,14 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
               </span>
             )}
             {isTrashed ? (
-              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-white text-xs font-bold uppercase tracking-wider">
+              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-cream text-xs font-bold uppercase tracking-wider">
                 {(() => {
                   const d = daysLeftInTrash(game.deleted_at)
                   return d <= 1 ? 'deleted today' : `${d} days left`
                 })()}
               </span>
             ) : isArchived && (
-              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-white text-xs font-bold uppercase tracking-wider">
+              <span className="px-2.5 py-1 rounded-full border-2 border-ink bg-ink text-cream text-xs font-bold uppercase tracking-wider">
                 archived
               </span>
             )}
@@ -666,7 +673,7 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
             {teams.slice(0, 6).map(t => (
               <span
                 key={t.id}
-                className="px-2.5 py-1 rounded-full border-2 border-ink text-xs font-semibold"
+                className="on-color px-2.5 py-1 rounded-full border-2 border-ink text-xs font-semibold"
                 style={{ background: t.color }}
               >
                 {t.name}
@@ -724,6 +731,8 @@ const GameCard = forwardRef(function GameCard({ game, i, isOwner, onEdit, onArch
               <MenuLink to={`/game/${game.id}/log`} hover="hover:bg-candy-yellow" icon={<LogIcon />} label="Log" onSelect={() => setMenu(null)} />
               <MenuLink to={`/game/${game.id}/analytics`} hover="hover:bg-candy-mint" icon={<ChartIcon />} label="Analytics" onSelect={() => setMenu(null)} />
               <MenuLink to={`/game/${game.id}/podium`} hover="hover:bg-candy-blue hover:text-white" icon={<PodiumIcon />} label="Podium" onSelect={() => setMenu(null)} />
+              <div className="h-[2px] bg-ink/10 my-1 mx-2" />
+              <MenuButton onClick={exportThis} hover="hover:bg-candy-yellow" icon={<DownloadIcon />} label="Export game" />
               {publicUrl && (
                 <>
                   <div className="h-[2px] bg-ink/10 my-1 mx-2" />
@@ -828,7 +837,7 @@ const NewGameCard = forwardRef(function NewGameCard({ i, onCreate }, ref) {
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 200, damping: 20, delay: i * 0.03 }}
       whileHover={{ y: -4, rotate: -0.5 }}
-      className="card-chunk overflow-hidden group min-h-[260px] flex flex-col items-center justify-center text-center p-8 bg-candy-mint/40 hover:bg-candy-mint transition"
+      className="card-chunk overflow-hidden group min-h-[260px] flex flex-col items-center justify-center text-center p-8 bg-candy-mint/40 dark:bg-candy-mint/20 hover:bg-candy-mint dark:hover:bg-candy-mint transition"
     >
       <div className="w-14 h-14 rounded-2xl bg-white border-2 border-ink grid place-items-center font-display text-3xl font-bold mb-3">+</div>
       <h3 className="font-display text-2xl font-bold leading-tight">New game</h3>
@@ -908,6 +917,15 @@ function LinkIcon() {
   )
 }
 
+function DownloadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
 function TrashIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

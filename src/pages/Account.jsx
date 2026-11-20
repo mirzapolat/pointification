@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { useDialogs } from '../components/Dialogs.jsx'
 import { addPasskey, passkeysSupported } from '../lib/passkeys.js'
 import { pushSupport, isSubscribed, subscribeThisDevice, unsubscribeThisDevice } from '../lib/push.js'
+import { downloadAllGames, readExportFile } from '../lib/transfer.js'
 
 export default function Account() {
   const { user, signOut } = useAuth()
@@ -60,6 +61,7 @@ export default function Account() {
         <PasskeysCard />
         <TwoFactorCard />
         <PrivacyCard />
+        <TransferCard />
         <DangerCard onDeleted={async () => { await signOut(); nav('/login', { replace: true }) }} />
       </main>
     </motion.div>
@@ -73,7 +75,7 @@ function Section({ title, accent, children }) {
       initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       className="card-chunk overflow-hidden"
     >
-      <div className="px-6 py-4 border-b-2 border-ink" style={{ background: accent }}>
+      <div className="on-color px-6 py-4 border-b-2 border-ink" style={{ background: accent }}>
         <h3 className="font-display text-2xl font-bold">{title}</h3>
       </div>
       <div className="p-6">{children}</div>
@@ -629,6 +631,74 @@ function PasskeysCard() {
       )}
       <Banner kind="error">{err}</Banner>
       <Banner kind="ok">{msg}</Banner>
+    </Section>
+  )
+}
+
+function TransferCard() {
+  const dialogs = useDialogs()
+  const fileRef = useRef(null)
+  const [busy, setBusy] = useState(null) // 'export' | 'import' | null
+  const [msg, setMsg] = useState(null) // { kind, text }
+
+  const exportAll = async () => {
+    setBusy('export'); setMsg(null)
+    const { count, error } = await downloadAllGames()
+    setBusy(null)
+    setMsg(error
+      ? { kind: 'error', text: error.message }
+      : { kind: 'success', text: `Exported ${count} ${count === 1 ? 'game' : 'games'}.` })
+  }
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // let the same file be picked again
+    if (!file) return
+    setMsg(null)
+    let data
+    try {
+      data = await readExportFile(file)
+    } catch (err) {
+      setMsg({ kind: 'error', text: err.message })
+      return
+    }
+    const n = data.games.length
+    const names = data.games.slice(0, 3).map(g => `"${g.name}"`).join(', ') + (n > 3 ? ` and ${n - 3} more` : '')
+    const ok = await dialogs.confirm({
+      title: `Import ${n} ${n === 1 ? 'game' : 'games'}?`,
+      message: `${names} will be added to your games as new copies. Nothing you already have is changed.`,
+      confirmLabel: 'Import',
+      tone: 'neutral',
+    })
+    if (!ok) return
+    setBusy('import')
+    const { data: games, error } = await api.importGames(data)
+    setBusy(null)
+    setMsg(error
+      ? { kind: 'error', text: error.message }
+      : { kind: 'success', text: `Imported ${games.length} ${games.length === 1 ? 'game' : 'games'}. They're on your games page.` })
+  }
+
+  return (
+    <Section title="Backup & transfer" accent="#FFD93D">
+      <p className="text-sm">
+        Download every game you own as one file — teams, scores, rounds, full history and logos — to keep
+        as a backup or to move to another account. To export a single game, use <em>Export game</em> in
+        that game's menu.
+      </p>
+      <p className="text-sm text-ink/60 mt-2">
+        Importing always adds new copies. Collaborators and public links are not included.
+      </p>
+      <div className="mt-4 flex flex-col sm:flex-row gap-2">
+        <button onClick={exportAll} disabled={!!busy} className="btn-chunk bg-white flex-1 disabled:opacity-60">
+          {busy === 'export' ? 'Exporting…' : 'Export all games'}
+        </button>
+        <button onClick={() => fileRef.current?.click()} disabled={!!busy} className="btn-chunk bg-candy-mint flex-1 disabled:opacity-60">
+          {busy === 'import' ? 'Importing…' : 'Import games…'}
+        </button>
+        <input ref={fileRef} type="file" accept=".json,application/json" onChange={onFile} className="hidden" />
+      </div>
+      <Banner kind={msg?.kind}>{msg?.text}</Banner>
     </Section>
   )
 }

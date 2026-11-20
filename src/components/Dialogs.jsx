@@ -72,7 +72,7 @@ function DialogShell({ dialog, onClose }) {
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={dismiss}
-      className="fixed inset-0 z-[60] bg-ink/40 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] bg-scrim/40 backdrop-blur-sm flex items-center justify-center p-4"
     >
       <motion.div
         onClick={e => e.stopPropagation()}

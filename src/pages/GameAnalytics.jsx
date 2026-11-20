@@ -19,9 +19,12 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const WEEKDAYS_LONG = ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays']
 
 // Chart tokens. Team lines wear the team's own color; everything else is ink.
-const INK = '#0F0F12'
-const GRID = 'rgba(15,15,18,0.08)'
-const AXIS = 'rgba(15,15,18,0.55)'
+// Theme-aware (CSS variables, see styles.css) so charts follow dark mode.
+const INK = 'rgb(var(--line))'
+const HALO = 'rgb(var(--surface))'
+const GRID = 'rgb(var(--ink) / 0.08)'
+const AXIS = 'rgb(var(--ink) / 0.55)'
+const inkA = a => `rgb(var(--ink) / ${a})`
 const GAIN = '#12A27A'   // diverging pole: points won
 const LOSS = '#E5486B'   // diverging pole: points lost
 const HEAT = '77,124,255' // candy blue, sequential ramp via opacity
@@ -289,7 +292,7 @@ function ScopeControl({ scope, setScope }) {
             onClick={() => setScope(s.id)}
             aria-pressed={scope === s.id}
             className={`px-3 py-1.5 rounded-xl font-display font-semibold text-sm whitespace-nowrap transition ${
-              scope === s.id ? 'bg-ink text-white' : 'text-ink/70 hover:text-ink hover:bg-cream'
+              scope === s.id ? 'bg-ink text-cream' : 'text-ink/70 hover:text-ink hover:bg-cream'
             }`}
           >{s.label}</button>
         ))}
@@ -308,7 +311,7 @@ function ModeToggle({ mode, setMode }) {
           onClick={() => setMode(o.id)}
           aria-pressed={mode === o.id}
           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-            mode === o.id ? 'bg-white shadow-[inset_0_0_0_2px_#0F0F12]' : 'text-ink/60 hover:text-ink'
+            mode === o.id ? 'bg-white shadow-[inset_0_0_0_2px_rgb(var(--line))]' : 'text-ink/60 hover:text-ink'
           }`}
         >{o.label}</button>
       ))}
@@ -372,7 +375,7 @@ function Kpis({ a, teams }) {
       label: 'Points lost',
       value: a.totals.lost ? `−${fmt(a.totals.lost)}` : '0',
       sub: `${a.totals.losses} ${a.totals.losses === 1 ? 'deduction' : 'deductions'}`,
-      bg: 'bg-candy-pink/80',
+      bg: 'bg-candy-pink',
     },
     {
       label: 'Lead changes',
@@ -380,7 +383,7 @@ function Kpis({ a, teams }) {
       sub: lastChange
         ? `last: ${a.teamMap[lastChange.team]?.name ?? 'a team'}, ${formatDay(lastChange.ts)}`
         : `${a.overtakes.length} ${a.overtakes.length === 1 ? 'overtake' : 'overtakes'} in total`,
-      bg: 'bg-candy-blue/70',
+      bg: 'bg-candy-blue',
     },
   ]
   return (
@@ -489,7 +492,7 @@ function ScoreRace({ a, teams, mode, focus }) {
         >
           {geo.ticks.map(v => (
             <g key={v}>
-              <line x1={geo.P.l} x2={w - geo.P.r} y1={geo.y(v)} y2={geo.y(v)} stroke={v === 0 ? 'rgba(15,15,18,0.3)' : GRID} />
+              <line x1={geo.P.l} x2={w - geo.P.r} y1={geo.y(v)} y2={geo.y(v)} stroke={v === 0 ? inkA(0.3) : GRID} />
               <text x={geo.P.l - 8} y={geo.y(v) + 4} textAnchor="end" fontSize="11" fill={AXIS}>{fmt(v)}</text>
             </g>
           ))}
@@ -508,7 +511,7 @@ function ScoreRace({ a, teams, mode, focus }) {
             const dim = focus && focus !== team.id
             return (
               <g key={team.id} opacity={dim ? 0.18 : 1} style={{ transition: 'opacity .2s' }}>
-                <path d={d} fill="none" stroke="#fff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={d} fill="none" stroke={HALO} strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
                 <path d={d} fill="none" stroke={INK} strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
                 <path d={d} fill="none" stroke={team.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </g>
@@ -532,7 +535,7 @@ function ScoreRace({ a, teams, mode, focus }) {
             <g pointerEvents="none">
               <line x1={geo.xs[k]} x2={geo.xs[k]} y1={geo.P.t} y2={H - geo.P.b} stroke={INK} strokeOpacity="0.35" strokeWidth="1" />
               {teams.map(t => (
-                <circle key={t.id} cx={geo.xs[k]} cy={geo.y(frame.scores[t.id] ?? 0)} r="5" fill={t.color} stroke="#fff" strokeWidth="2"
+                <circle key={t.id} cx={geo.xs[k]} cy={geo.y(frame.scores[t.id] ?? 0)} r="5" fill={t.color} stroke={HALO} strokeWidth="2"
                   opacity={focus && focus !== t.id ? 0.25 : 1} />
               ))}
             </g>
@@ -555,7 +558,7 @@ function ScoreRace({ a, teams, mode, focus }) {
       )}
       {a.leadChanges.length > 0 && (
         <p className="mt-2 text-[11px] text-ink/50 flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="#fff" stroke={INK} strokeWidth="1.5" /><circle cx="6" cy="6" r="1.5" fill={INK} /></svg>
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill={HALO} stroke={INK} strokeWidth="1.5" /><circle cx="6" cy="6" r="1.5" fill={INK} /></svg>
           Marks a new leader. Hover or tap the chart to step through every change.
         </p>
       )}
@@ -653,7 +656,7 @@ function ActivityChart({ a }) {
           role="img" aria-label="Points won and lost per period">
           {geo.ticks.map(v => (
             <g key={v}>
-              <line x1={geo.P.l} x2={w - geo.P.r} y1={geo.y(v)} y2={geo.y(v)} stroke={v === 0 ? 'rgba(15,15,18,0.35)' : GRID} />
+              <line x1={geo.P.l} x2={w - geo.P.r} y1={geo.y(v)} y2={geo.y(v)} stroke={v === 0 ? inkA(0.35) : GRID} />
               <text x={geo.P.l - 8} y={geo.y(v) + 4} textAnchor="end" fontSize="11" fill={AXIS}>{signed(v)}</text>
             </g>
           ))}
@@ -762,7 +765,7 @@ function Heatmap({ a }) {
                 width={cell - gap}
                 height={cell - gap}
                 rx={Math.min(4, cell / 4)}
-                fill={cc.count ? `rgba(${HEAT},${(0.15 + 0.85 * Math.pow(t, 0.75)).toFixed(3)})` : 'rgba(15,15,18,0.045)'}
+                fill={cc.count ? `rgba(${HEAT},${(0.15 + 0.85 * Math.pow(t, 0.75)).toFixed(3)})` : inkA(0.045)}
                 stroke={isSel ? INK : 'none'}
                 strokeWidth={isSel ? 2 : 0}
                 onPointerEnter={() => setHover([di, hi])}
@@ -972,7 +975,7 @@ function DayTable({ a, teams }) {
                       <td key={t.id} className="p-0.5">
                         <div
                           className={`h-9 min-w-[3.25rem] rounded-lg grid place-items-center tabular-nums font-display font-bold ${v === 0 ? 'text-ink/25' : ''} ${v > 0 && v === best ? 'ring-2 ring-ink ring-inset' : ''}`}
-                          style={{ background: v > 0 ? hexA(GAIN, o) : v < 0 ? hexA(LOSS, o) : 'rgba(15,15,18,0.03)' }}
+                          style={{ background: v > 0 ? hexA(GAIN, o) : v < 0 ? hexA(LOSS, o) : inkA(0.03) }}
                           title={`${t.name}: ${signed(v)} on ${formatDayLong(d.ts)}`}
                         >
                           {v === 0 ? '·' : signed(v)}
@@ -1016,7 +1019,7 @@ function TeamCards({ a, teams }) {
             className="card-chunk p-4 md:p-5 min-w-0 flex flex-col"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl border-2 border-ink grid place-items-center font-display font-bold shrink-0" style={{ background: t.color }}>
+              <div className="on-color w-10 h-10 rounded-xl border-2 border-ink grid place-items-center font-display font-bold shrink-0" style={{ background: t.color }}>
                 {i + 1}
               </div>
               <div className="min-w-0 flex-1">

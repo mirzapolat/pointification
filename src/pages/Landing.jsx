@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../lib/auth.jsx'
+import { FAQ as QUESTIONS } from '../../server/seo.js'
 
 const DONATE_URL = import.meta.env.VITE_DONATE_URL
 
@@ -141,7 +142,7 @@ function ScoreMock() {
           animate={{ y: [0, -6, 0] }}
           transition={{ duration: 4 + i, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
           style={{ rotate: `${t.tilt}deg`, background: t.color }}
-          className="card-chunk overflow-hidden p-5 text-left"
+          className="on-color card-chunk overflow-hidden p-5 text-left"
         >
           <div className="text-xs font-bold uppercase tracking-wider text-ink/70">team {i + 1}</div>
           <div className="font-display font-bold text-xl mt-0.5 truncate">{t.name}</div>
@@ -219,14 +220,6 @@ function HowItWorks() {
   )
 }
 
-const QUESTIONS = [
-  ['Is Pointification free?', 'Yes. Pointification is free to use. Create an account to set up games, add teams and keep score in your browser.'],
-  ['What can I use the scoreboard for?', 'Use it for trivia and quiz nights, classroom team competitions, family board games or sports practice. You choose the teams and point values, so scoring can follow your own rules.'],
-  ['Do spectators need an account?', 'No. Share a read-only scoreboard link so spectators can follow live scores without signing in. Anyone with the link can view that scoreboard.'],
-  ['Can several people keep score together?', 'Yes. Invite collaborators by email so they can help update scores. Score changes appear live across connected devices.'],
-  ['Do I need to install an app?', 'No. Pointification runs in your web browser on a phone, tablet or computer. An internet connection is needed to sync scores and follow live updates.'],
-  ['Can I customize my scoreboard?', 'Yes. Choose team names and colors, upload a game logo, review point history and show a winner podium at the end.'],
-]
 
 function FAQ() {
   return (
@@ -334,7 +327,7 @@ function Blobs() {
       {blobs.map((b, i) => (
         <motion.div
           key={i}
-          className="absolute rounded-full border-2 border-ink opacity-60"
+          className="absolute rounded-full border-2 border-ink opacity-60 dark:opacity-80"
           style={{ left: b.x, top: b.y, width: b.s, height: b.s, background: b.c }}
           animate={{ y: [0, -16, 0], rotate: [0, 6, 0] }}
           transition={{ duration: 7 + i, repeat: Infinity, ease: 'easeInOut', delay: i * 0.4 }}

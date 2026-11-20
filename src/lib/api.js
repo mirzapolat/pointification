@@ -210,6 +210,14 @@ export const setMemberNickname = (gameId, userId, nickname) =>
 export const removeMember = (gameId, userId) =>
   request(`/games/${gameId}/members/${userId}`, { method: 'DELETE' })
 
+// --- Export / import -----------------------------------------------------
+
+/** The full export file (see server/lib/transfer.js) for every game you own. */
+export const exportAllGames = () => request('/games/export')
+export const exportGame = (id) => request(`/games/${id}/export`)
+/** Creates new games from an export file; never overwrites existing ones. */
+export const importGames = (file) => pick(request('/games/import', { method: 'POST', body: file }), 'games')
+
 // --- Public share links --------------------------------------------------
 
 export const getPublicGame = (token) => request(`/public/${encodeURIComponent(token)}`)

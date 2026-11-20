@@ -2,6 +2,8 @@
 # App and share pages send noindex headers; allow crawling to read those rules.
 User-agent: *
 Allow: /
+# Link-preview cards (og:image) must stay fetchable for social crawlers.
+Allow: /api/og
 Disallow: /api/
 Disallow: /logos/
 Disallow: /prerender/

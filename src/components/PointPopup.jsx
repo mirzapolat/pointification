@@ -47,7 +47,7 @@ export default function PointPopup({ team, presets, onApply, onClose, busy }) {
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onClose}
-      className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-40 bg-scrim/40 backdrop-blur-sm flex items-center justify-center p-4"
     >
       <motion.div
         onClick={e => e.stopPropagation()}
@@ -57,7 +57,7 @@ export default function PointPopup({ team, presets, onApply, onClose, busy }) {
         transition={{ type: 'spring', stiffness: 240, damping: 20 }}
         className="card-chunk w-full max-w-md overflow-hidden"
       >
-        <div className="px-6 py-5 border-b-2 border-ink flex items-center justify-between" style={{ background: team.color }}>
+        <div className="on-color px-6 py-5 border-b-2 border-ink flex items-center justify-between" style={{ background: team.color }}>
           <div>
             <p className="text-ink/60 text-xs font-semibold uppercase tracking-wider">Adjust points</p>
             <h3 className="font-display text-3xl font-bold leading-none mt-1">{team.name}</h3>

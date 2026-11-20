@@ -433,7 +433,7 @@ function TeamRow({ team, index, flashKey, onClick, compact, showRound, roundDelt
         layout: { type: 'spring', stiffness: 260, damping: 26 },
       }}
       whileTap={{ scale: 0.995 }}
-      className={`relative flex-1 min-h-0 flex items-center justify-between ${padX} border-ink overflow-hidden text-left`}
+      className={`on-color relative flex-1 min-h-0 flex items-center justify-between ${padX} border-ink overflow-hidden text-left`}
       style={{ background: team.color }}
     >
       <AnimatePresence>
@@ -443,7 +443,7 @@ function TeamRow({ team, index, flashKey, onClick, compact, showRound, roundDelt
             initial={{ opacity: 0.85 }}
             animate={{ opacity: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="absolute inset-0 bg-white pointer-events-none"
+            className="absolute inset-0 bg-[#fff] pointer-events-none"
           />
         )}
       </AnimatePresence>

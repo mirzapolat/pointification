@@ -99,7 +99,7 @@ export default function LogoCropper({
 
   return createPortal(
     <motion.div
-      className="fixed inset-0 z-[80] bg-ink/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-6 sm:pb-safe sm:[--pb:1.5rem]"
+      className="fixed inset-0 z-[80] bg-scrim/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-6 sm:pb-safe sm:[--pb:1.5rem]"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}
     >
@@ -166,7 +166,7 @@ export default function LogoCropper({
                   aria-checked={aspectId === a.id}
                   onClick={() => setAspectId(a.id)}
                   className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-display font-semibold text-sm transition ${
-                    aspectId === a.id ? 'bg-ink text-white' : 'hover:bg-white'
+                    aspectId === a.id ? 'bg-ink text-cream' : 'hover:bg-white'
                   }`}
                 >
                   <span className="hidden sm:block">{a.icon}</span>
